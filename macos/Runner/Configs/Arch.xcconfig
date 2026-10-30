@@ -1,0 +1,2 @@
+ARCHS = arm64
+ONLY_ACTIVE_ARCH = NO

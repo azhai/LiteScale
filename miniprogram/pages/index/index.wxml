@@ -1,0 +1,44 @@
+<view class="page">
+  <view class="card">
+    <view class="title">{{s.currentMember}}</view>
+    <scroll-view class="member-bar" scroll-x enable-flex>
+      <view
+        wx:for="{{members}}"
+        wx:key="id"
+        class="member-chip {{item.active ? 'member-chip-on' : ''}}"
+        data-id="{{item.id}}"
+        bindtap="onMember">
+        <text>{{item.avatar}} {{item.name}}</text>
+      </view>
+    </scroll-view>
+  </view>
+
+  <view class="card">
+    <view class="title status">{{s.currentWeight}}</view>
+    <view class="big">{{weightText}} <text class="unit">{{unitLabel}}</text></view>
+    <view class="chips">
+      <text class="chip {{locked ? 'chip-green' : 'chip-orange'}}">{{locked ? s.locked : s.measuring}}</text>
+      <text class="chip chip-purple" wx:if="{{bmiText}}">{{bmiText}}</text>
+    </view>
+    <view class="muted status-line">{{status}}</view>
+  </view>
+
+  <view class="card">
+    <view class="title">{{s.foundDevices}}</view>
+    <view class="dev-empty muted" wx:if="{{!found.length}}">{{s.noDevicesFound}}</view>
+    <view class="dev-row" wx:for="{{found}}" wx:key="id">
+      <view class="dev-main">
+        <text class="dev-name">{{item.name || item.id}}</text>
+        <text class="muted">{{item.id}}</text>
+      </view>
+      <text class="dev-rssi {{item.ok ? 'ok' : ''}}">{{item.rssi}} dBm</text>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{debugText}}">
+    <view class="title">{{s.debug}}</view>
+    <text class="mono">{{debugText}}</text>
+  </view>
+
+  <button class="btn" bindtap="toggle">{{scanning ? s.stopScan : s.startScan}}</button>
+</view>

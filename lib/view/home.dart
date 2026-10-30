@@ -1,496 +1,625 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'dart:async';
-import 'dart:typed_data';
-import 'dart:math';
+
+import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+import '../i18n/strings.dart';
+import '../model/entities.dart';
+import '../model/weight_record.dart';
+import '../service/app_controller.dart';
+import '../service/units.dart';
+import '../source/scale_source.dart';
+import '../source/source_registry.dart';
+import 'theme.dart';
+import 'widgets/app_widgets.dart';
 
 class ScaleConnectPage extends StatefulWidget {
-  const ScaleConnectPage({Key? key}) : super(key: key);
+  final AppController controller;
+  const ScaleConnectPage({super.key, required this.controller});
 
   @override
   State<ScaleConnectPage> createState() => _ScaleConnectPageState();
 }
 
 class _ScaleConnectPageState extends State<ScaleConnectPage> {
-  final String targetMacAddress = "24:16:51:0E:49:87";
-  final String targetDeviceName = "Chipsea-BLE";
+  late final List<ScaleSource> _sources;
+  late ScaleSource _active;
+  StreamSubscription<ScaleSample>? _sampleSub;
 
-  BluetoothDevice? targetDevice;
-  bool isConnecting = false;
-  bool isConnected = false;
-  String connectionStatus = "ابحث عن الميزان...";
-  String currentWeight = "---";
-  String currentUnit = "---";
-  int currentDecimalPlaces = 1;
+  double? _lastKg;
+  String? _lastDeviceId;
+  int _packetCount = 0;
+  bool _showLogs = false;
 
-  StreamSubscription<List<ScanResult>>? _scanSubscription;
-  StreamSubscription<BluetoothConnectionState>? _connectionStateSubscription;
-  BluetoothCharacteristic? _writeCharacteristic;
-  BluetoothCharacteristic? _notifyCharacteristic;
-
-  final Guid okokServiceUUID = Guid("0000FFF0-0000-1000-8000-00805F9B34FB");
-  final Guid okokNotifyCharacteristicUUID = Guid(
-    "0000FFF1-0000-1000-8000-00805F9B34FB",
-  );
-  final Guid okokWriteCharacteristicUUID = Guid(
-    "0000FFF2-0000-1000-8000-00805F9B34FB",
-  );
+  AppController get c => widget.controller;
 
   @override
   void initState() {
     super.initState();
-    _checkBluetoothAndStartScan();
+    _sources = buildSources();
+    _active = _sources.first;
+    _active.addListener(_onSourceChanged);
+    _sampleSub = _active.samples.listen(_onSample);
+    _active.start();
   }
 
-  void _checkBluetoothAndStartScan() async {
-    var adapterState = await FlutterBluePlus.adapterState.first;
-    if (adapterState != BluetoothAdapterState.on) {
-      setState(() {
-        connectionStatus = "البلوتوث غير مفعل. يرجى تفعيله.";
-        isConnecting = false;
-      });
-      FlutterBluePlus.turnOn();
-      return;
+  void _onSourceChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onSample(ScaleSample sample) {
+    _packetCount++;
+    _lastDeviceId = sample.deviceId;
+    if (mounted) {
+      setState(() => _lastKg = sample.kg);
     }
-    startScanAndConnect();
-  }
-
-  void startScanAndConnect() async {
-    setState(() {
-      connectionStatus = "جاري البحث عن الميزان...";
-      isConnecting = true;
-      currentWeight = "---";
-    });
-
-    await FlutterBluePlus.stopScan();
-
-    _scanSubscription = FlutterBluePlus.scanResults.listen(
-      (results) {
-        for (ScanResult r in results) {
-          bool hasTargetService = r.advertisementData.serviceUuids.contains(
-            okokServiceUUID.str.toUpperCase(),
-          );
-          if ((r.device.remoteId.str == targetMacAddress ||
-                  r.device.platformName == targetDeviceName) &&
-              hasTargetService) {
-            print(
-              'الجهاز المكتشف: ${r.device.platformName} (ID: ${r.device.remoteId.str})',
-            );
-            _scanSubscription?.cancel();
-            connectToDevice(r.device);
-            return;
-          }
-        }
-      },
-      onError: (e) {
-        print("خطأ في المسح: $e");
-        setState(() {
-          connectionStatus = "خطأ في المسح: $e";
-          isConnecting = false;
-        });
-      },
-    );
-
-    await FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
-
-    if (!isConnected && isConnecting && targetDevice == null) {
-      setState(() {
-        connectionStatus = "لم يتم العثور على الميزان. حاول مرة أخرى.";
-        isConnecting = false;
-      });
+    if (sample.locked) {
+      _save(sample);
     }
   }
 
-  void connectToDevice(BluetoothDevice device) async {
-    setState(() {
-      targetDevice = device;
-      connectionStatus =
-          "جاري الاتصال بالميزان ${device.platformName.isEmpty ? 'المجهول' : device.platformName} ...";
-      isConnecting = true;
-    });
-
-    _connectionStateSubscription = targetDevice!.connectionState.listen((
-      BluetoothConnectionState state,
-    ) async {
-      if (state == BluetoothConnectionState.connected) {
-        setState(() {
-          isConnected = true;
-          isConnecting = false;
-          connectionStatus =
-              "تم الاتصال بنجاح بالميزان ${device.platformName.isEmpty ? 'المجهول' : device.platformName}";
-        });
-        discoverOkokServiceAndCharacteristics();
-      } else if (state == BluetoothConnectionState.disconnected) {
-        setState(() {
-          isConnected = false;
-          isConnecting = false;
-          connectionStatus = "تم قطع الاتصال بالميزان.";
-          currentWeight = "---";
-          currentUnit = "---";
-        });
-        _writeCharacteristic = null;
-        _notifyCharacteristic = null;
-      }
-    });
-
-    try {
-      await targetDevice!.connect(timeout: const Duration(seconds: 30));
-    } catch (e) {
-      print("فشل الاتصال: $e");
-      setState(() {
-        isConnecting = false;
-        connectionStatus = "فشل الاتصال بالميزان: $e";
-      });
-      targetDevice?.disconnect();
+  Future<void> _save(ScaleSample sample) async {
+    await c.rememberDevice(sample.deviceId, sample.deviceName);
+    final bool added = await c.addRecord(sample.kg, deviceId: sample.deviceId);
+    if (added && mounted) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(
+          content: Text('${c.s.savedToHistory} · ${c.activeMember.name}'),
+        ));
     }
-  }
-
-  void discoverOkokServiceAndCharacteristics() async {
-    if (targetDevice == null || !isConnected) return;
-
-    try {
-      List<BluetoothService> services = await targetDevice!.discoverServices();
-      print('تم اكتشاف ${services.length} خدمة.');
-
-      for (var service in services) {
-        if (service.uuid == okokServiceUUID) {
-          print(
-            'تم العثور على خدمة OKOK المخصصة: ${service.uuid.str.toUpperCase()}',
-          );
-          for (var characteristic in service.characteristics) {
-            print(
-              'Characteristic UUID: ${characteristic.uuid.str.toUpperCase()}, Properties: ${characteristic.properties}',
-            );
-
-            if (characteristic.uuid == okokWriteCharacteristicUUID &&
-                characteristic.properties.write) {
-              _writeCharacteristic = characteristic;
-              print(
-                'تم تحديد خاصية الكتابة (Write Characteristic): ${characteristic.uuid.str.toUpperCase()}.',
-              );
-            }
-            if (characteristic.uuid == okokNotifyCharacteristicUUID &&
-                (characteristic.properties.notify ||
-                    characteristic.properties.indicate)) {
-              _notifyCharacteristic = characteristic;
-              print(
-                'تم تحديد خاصية الإشعارات (Notify Characteristic): ${characteristic.uuid.str.toUpperCase()}.',
-              );
-            }
-          }
-          break;
-        }
-      }
-
-      if (_writeCharacteristic != null && _notifyCharacteristic != null) {
-        await _notifyCharacteristic!.setNotifyValue(true);
-        print('تم الاشتراك في إشعارات خاصية OKOK.');
-
-        _notifyCharacteristic!.value.listen(
-          (value) {
-            print('بيانات خام جديدة (إطار OKOK): $value');
-            _parseOkokFrame(value);
-          },
-          onError: (e) {
-            print("خطأ في الاستماع لبيانات OKOK: $e");
-          },
-        );
-      } else {
-        setState(() {
-          connectionStatus =
-              "لم يتم العثور على خصائص OKOK المطلوبة (الكتابة: ${okokWriteCharacteristicUUID.str.toUpperCase()}/الإشعارات: ${okokNotifyCharacteristicUUID.str.toUpperCase()}).";
-        });
-        print('يرجى التأكد من أن UUIDs الخصائص صحيحة (هذه القيم من الوثيقة).');
-      }
-    } catch (e) {
-      print('خطأ أثناء اكتشاف خدمات OKOK أو إعدادها: $e');
-      setState(() {
-        connectionStatus = "خطأ في إعداد الاتصال: $e";
-      });
-    }
-  }
-
-  int _calculateChecksum(List<int> data) {
-    if (data.length < 3) {
-      return 0;
-    }
-    int checksum = 0;
-    for (int i = 1; i < (2 + data[2] + 1); i++) {
-      checksum ^= data[i];
-    }
-    return checksum & 0xFF;
-  }
-
-  Future<void> sendOkokCommand(List<int> commandFrame) async {
-    if (_writeCharacteristic != null) {
-      try {
-        await _writeCharacteristic!.write(commandFrame, withoutResponse: false);
-        print('تم إرسال الأمر: $commandFrame');
-      } catch (e) {
-        print('فشل إرسال الأمر: $e');
-      }
-    } else {
-      print('خاصية الكتابة غير متاحة.');
-    }
-  }
-
-  void _parseOkokFrame(List<int> rawData) {
-    if (rawData.isEmpty || rawData[0] != 0xCA) {
-      print("ليس إطار OKOK صالحًا (لا يبدأ بـ 0xCA) أو فارغًا.");
-      return;
-    }
-
-    int version = rawData[1];
-    int dataLength = rawData[2];
-
-    if (rawData.length < 4) {
-      print("إطار قصير جدًا لحساب Checksum.");
-      return;
-    }
-
-    int receivedChecksum = rawData.last;
-    int calculatedChecksum = _calculateChecksum(
-      rawData.sublist(0, rawData.length - 1),
-    );
-
-    if (receivedChecksum != calculatedChecksum) {
-      print("Checksum غير متطابق. البيانات قد تكون تالفة.");
-      print(
-        "المستلم: ${receivedChecksum.toRadixString(16)}, المحسوب: ${calculatedChecksum.toRadixString(16)}",
-      );
-      return;
-    } else {
-      print("Checksum متطابق.");
-    }
-
-    if (rawData.length != (3 + dataLength + 1)) {
-      print(
-        "طول الإطار غير صحيح. الإطار: $rawData, الطول المعلن: $dataLength.",
-      );
-      return;
-    }
-
-    List<int> dataPayload = rawData.sublist(3, 3 + dataLength);
-
-    if (dataPayload.length < 12) {
-      print(
-        "حمولة البيانات قصيرة جدًا لبيانات الوزن (تحتاج 12 بايت على الأقل). الحمولة: $dataPayload",
-      );
-      return;
-    }
-
-    int lockStatusByte = dataPayload[0];
-
-    int messagePropertiesByte = dataPayload[8];
-
-    int unitBits = (messagePropertiesByte >> 3) & 0x03;
-    switch (unitBits) {
-      case 0x00:
-        currentUnit = "كجم";
-        break;
-      case 0x01:
-        currentUnit = "Jin";
-        break;
-      case 0x02:
-        currentUnit = "رطل";
-        break;
-      case 0x03:
-        currentUnit = "ST:LB";
-        break;
-      default:
-        currentUnit = "غير معروف";
-    }
-
-    int decimalBits = (messagePropertiesByte >> 1) & 0x03;
-    switch (decimalBits) {
-      case 0x00:
-        currentDecimalPlaces = 1;
-        break;
-      case 0x01:
-        currentDecimalPlaces = 0;
-        break;
-      case 0x02:
-        currentDecimalPlaces = 2;
-        break;
-      default:
-        currentDecimalPlaces = 1;
-    }
-
-    ByteData weightByteData = ByteData.view(
-      Uint8List.fromList(dataPayload.sublist(5, 7)).buffer,
-    );
-    int rawWeight = weightByteData.getUint16(0, Endian.little);
-
-    double actualWeight = rawWeight / pow(10, currentDecimalPlaces);
-
-    setState(() {
-      currentWeight = actualWeight.toStringAsFixed(currentDecimalPlaces);
-      connectionStatus =
-          "متصل. الوزن: ${currentWeight} ${currentUnit} (مؤمن: ${lockStatusByte == 0x01 ? 'نعم' : 'لا'})";
-    });
-    print(
-      "تم تحليل الوزن: $currentWeight $currentUnit (أعلام: ${messagePropertiesByte.toRadixString(16)}, وزن خام: $rawWeight)",
-    );
   }
 
   @override
   void dispose() {
-    _scanSubscription?.cancel();
-    _connectionStateSubscription?.cancel();
-    targetDevice?.disconnect();
+    _sampleSub?.cancel();
+    _active.removeListener(_onSourceChanged);
+    for (final ScaleSource s in _sources) {
+      s.dispose();
+    }
     super.dispose();
+  }
+
+  StatusKey _keyFor(String code) {
+    switch (code) {
+      case 'scanning':
+        return StatusKey.scanning;
+      case 'bt_off':
+        return StatusKey.btOff;
+      case 'perm_denied':
+        return StatusKey.permDenied;
+      case 'no_payload':
+        return StatusKey.noPayload;
+      case 'stopped':
+        return StatusKey.stopped;
+      case 'locked':
+        return StatusKey.locked;
+      case 'measuring':
+        return StatusKey.measuring;
+      case 'scan_error':
+        return StatusKey.scanError;
+      case 'scan_start_failed':
+        return StatusKey.scanStartFailed;
+      default:
+        return StatusKey.idle;
+    }
+  }
+
+  Color _statusTone(ColorScheme cs) {
+    switch (_active.statusCode) {
+      case 'locked':
+        return cs.primary;
+      case 'measuring':
+        return cs.tertiary;
+      case 'scanning':
+        return cs.secondary;
+      case 'bt_off':
+      case 'perm_denied':
+      case 'scan_error':
+      case 'scan_start_failed':
+        return cs.error;
+      default:
+        return cs.onSurfaceVariant;
+    }
+  }
+
+  /// Most recent stored reading for the active member — shown until a live
+  /// advertisement arrives, so the hero is never just an empty placeholder.
+  WeightRecord? _latestRecord() {
+    WeightRecord? latest;
+    for (final WeightRecord r in c.records) {
+      if (r.memberId != c.activeMemberId) continue;
+      if (latest == null || r.time.isAfter(latest.time)) latest = r;
+    }
+    return latest;
+  }
+
+  /// Goal progress when a goal is set, otherwise the reading's position inside
+  /// a 15–35 BMI band. Purely a visual cue, never a medical claim.
+  double _ringProgress(double? kg, double? bmi) {
+    if (kg == null || kg <= 0) return 0;
+    final double? goal = c.goalKg;
+    if (goal != null && goal > 0) return (goal / kg).clamp(0.02, 1.0);
+    if (bmi == null) return 0.62;
+    return ((bmi - 15) / 20).clamp(0.06, 0.98);
   }
 
   @override
   Widget build(BuildContext context) {
+    final ThemeData t = Theme.of(context);
+    final S s = c.s;
+    final bool isZh = s.isZh;
+    final WeightRecord? latest = _latestRecord();
+    final bool live = _lastKg != null;
+    final double? kg = _lastKg ?? latest?.kg;
+    final double? bmi = kg == null ? null : c.bmiOf(kg);
+    final String unit = Units.label(c.unit, isZh);
+    final String weightValue = kg == null
+        ? '—'
+        : Units.toDisplay(kg, c.unit).toStringAsFixed(c.unit == 'st' ? 2 : 1);
     return Scaffold(
       appBar: AppBar(
-        title: const Text("ميزان الصحة الذكي"),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.blueAccent, Colors.purpleAccent],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+        title: Row(
+          children: <Widget>[
+            Text(s.appTitle),
+            const SizedBox(width: 8),
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: t.colorScheme.primary,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          IconButton(
+            tooltip: s.debugTitle,
+            onPressed: () => setState(() => _showLogs = !_showLogs),
+            icon: Icon(
+              _showLogs ? Icons.bug_report : Icons.bug_report_outlined,
+              color: _showLogs ? t.colorScheme.primary : null,
             ),
           ),
-        ),
-        elevation: 0,
+          const SizedBox(width: 8),
+        ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.white, Colors.blue],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(Insets.page, 4, Insets.page, 28),
+        children: <Widget>[
+          _memberBar(s),
+          const SizedBox(height: Insets.gap),
+          _heroCard(s, weightValue, unit, bmi, kg, live, latest),
+          const SizedBox(height: Insets.gap + 2),
+          _actions(s),
+          if (_sources.length > 1) ...<Widget>[
+            const SizedBox(height: Insets.gap),
+            _sourceBar(s),
+          ],
+          SectionHeader(
+            title: s.tabDevices,
+            trailing: Text(
+              '${_active.devices.length}',
+              style: t.textTheme.labelMedium?.copyWith(
+                color: t.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Card(
-                margin: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 10,
+          _devicesCard(s),
+          if (_showLogs) ...<Widget>[
+            SectionHeader(title: s.debugTitle),
+            _logCard(s),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _memberBar(S s) {
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: c.members.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (BuildContext context, int i) {
+          final Member m = c.members[i];
+          final bool selected = c.activeMemberId == m.id;
+          return ChoicePill(
+            label: m.name,
+            selected: selected,
+            onTap: () => c.setActiveMember(m.id),
+            leading: Text(m.avatar, style: const TextStyle(fontSize: 14)),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _heroCard(
+    S s,
+    String weightValue,
+    String unit,
+    double? bmi,
+    double? kg,
+    bool live,
+    WeightRecord? latest,
+  ) {
+    final ThemeData t = Theme.of(context);
+    final ColorScheme cs = t.colorScheme;
+    final bool hasGoal = c.goalKg != null;
+    final int memberRecords = c.records
+        .where((WeightRecord r) => r.memberId == c.activeMemberId)
+        .length;
+
+    String caption;
+    if (!live && latest != null) {
+      caption = '${s.lastReading} · ${_shortTime(latest.time)}';
+    } else if (kg == null) {
+      caption = s.measureHint;
+    } else if (hasGoal) {
+      final double diff = kg - c.goalKg!;
+      caption = diff <= 0
+          ? s.goalReached
+          : '${s.goalDistance} ${Units.format(diff, c.unit, isZh: s.isZh)}';
+    } else {
+      caption = '${s.bmi} ${bmi!.toStringAsFixed(1)} · ${s.bmiCategory(bmi)}';
+    }
+
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(Insets.card, 16, Insets.card, 14),
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          cs.primary.withValues(alpha: t.brightness == Brightness.light
+              ? 0.055
+              : 0.10),
+          Colors.transparent,
+        ],
+      ),
+      child: Column(
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Flexible(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: StatusPill(
+                    label: s.status(
+                      _keyFor(_active.statusCode),
+                      _active.statusDetail,
+                    ),
+                    tone: _statusTone(cs),
+                  ),
                 ),
-                elevation: 8,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
+              ),
+              if (_active.isRunning) ...<Widget>[
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.8,
+                    color: cs.primary.withValues(alpha: 0.55),
+                  ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    children: [
+              ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          WeightRing(
+            progress: _ringProgress(kg, bmi),
+            size: 218,
+            stroke: 12,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: <Widget>[
                       Text(
-                        connectionStatus,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey.shade700,
+                        weightValue,
+                        style: t.textTheme.displayMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          height: 1.0,
+                          color: kg == null
+                              ? cs.onSurface.withValues(alpha: 0.28)
+                              : cs.onSurface,
+                          fontFeatures: const <FontFeature>[
+                            FontFeature.tabularFigures(),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 20),
-                      Text(
-                        "الوزن الحالي:",
-                        style: TextStyle(
-                          fontSize: 20,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        "$currentWeight $currentUnit",
-                        style: const TextStyle(
-                          fontSize: 48,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.deepPurple,
+                      const SizedBox(width: 5),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          unit,
+                          style: t.textTheme.titleMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 40),
-              if (isConnecting)
-                const CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                )
-              else if (isConnected && !isConnecting)
-                Column(
-                  children: [
-                    const Icon(
-                      Icons.bluetooth_connected,
-                      color: Colors.green,
-                      size: 100,
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: 172,
+                  child: Text(
+                    caption,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      height: 1.3,
                     ),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          connectionStatus =
-                              "الميزان متصل. انتظر القياس أو قم بالوقوف عليه.";
-                        });
-                      },
-                      icon: const Icon(Icons.monitor_weight),
-                      label: const Text("الميزان متصل (انتظر القياس)"),
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: Colors.lightBlueAccent,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 25,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        elevation: 5,
-                      ),
-                    ),
-                    const SizedBox(height: 15),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        targetDevice?.disconnect();
-                      },
-                      icon: const Icon(Icons.link_off),
-                      label: const Text("قطع الاتصال"),
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: Colors.redAccent,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 25,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        elevation: 5,
-                      ),
-                    ),
-                  ],
-                )
-              else if (!isConnecting && !isConnected)
-                ElevatedButton.icon(
-                  onPressed: _checkBluetoothAndStartScan,
-                  icon: const Icon(Icons.bluetooth_searching),
-                  label: const Text("البدء بالبحث والاتصال"),
-                  style: ElevatedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    backgroundColor: Colors.deepPurpleAccent,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 30,
-                      vertical: 15,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    elevation: 5,
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Divider(color: cs.outlineVariant.withValues(alpha: 0.6)),
+          const SizedBox(height: 12),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: StatTile(
+                  label: s.bmi,
+                  value: bmi?.toStringAsFixed(1) ?? '--',
+                ),
+              ),
+              _vDivider(cs),
+              Expanded(
+                child: StatTile(
+                  label: s.goalDistance,
+                  value: hasGoal ? _goalText(s, kg) : s.noGoalSet,
+                  align: CrossAxisAlignment.center,
+                ),
+              ),
+              _vDivider(cs),
+              Expanded(
+                child: StatTile(
+                  label: s.recordsTotal,
+                  value: '$memberRecords',
+                  align: CrossAxisAlignment.end,
+                ),
+              ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  String _goalText(S s, double? kg) {
+    final double? goal = c.goalKg;
+    if (goal == null) return s.noGoalSet;
+    if (kg == null) return '--';
+    final double diff = kg - goal;
+    if (diff <= 0) return s.goalReached;
+    return Units.format(diff, c.unit, isZh: s.isZh);
+  }
+
+  String _shortTime(DateTime t) {
+    final DateTime now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    if (t.year == now.year && t.month == now.month && t.day == now.day) {
+      return '${two(t.hour)}:${two(t.minute)}';
+    }
+    return '${t.month}/${t.day} ${two(t.hour)}:${two(t.minute)}';
+  }
+
+  Widget _vDivider(ColorScheme cs) => Container(
+        width: 1,
+        height: 26,
+        color: cs.outlineVariant.withValues(alpha: 0.6),
+      );
+
+  Widget _actions(S s) {
+    final bool running = _active.isRunning;
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: <Widget>[
+        FilledButton.icon(
+          onPressed: () => running ? _active.stop() : _active.start(),
+          icon: Icon(
+            running ? Icons.stop_rounded : Icons.bluetooth_searching_rounded,
+            size: 20,
+          ),
+          label: Text(running ? s.stopScan : s.startScan),
         ),
+        if (_active.state == SourceState.permissionDenied)
+          OutlinedButton.icon(
+            onPressed: openAppSettings,
+            icon: const Icon(Icons.tune_rounded, size: 18),
+            label: Text(s.openSystemSettings),
+          ),
+      ],
+    );
+  }
+
+  Widget _sourceBar(S s) {
+    return Wrap(
+      spacing: 8,
+      children: _sources.map((ScaleSource src) {
+        return ChoicePill(
+          label: src.kind,
+          selected: identical(src, _active),
+          onTap: () => _switchSource(src),
+        );
+      }).toList(),
+    );
+  }
+
+  Future<void> _switchSource(ScaleSource next) async {
+    if (identical(next, _active)) return;
+    await _active.stop();
+    _active.removeListener(_onSourceChanged);
+    await _sampleSub?.cancel();
+
+    _active = next;
+    _active.addListener(_onSourceChanged);
+    _sampleSub = _active.samples.listen(_onSample);
+    _active.start();
+    setState(() {});
+  }
+
+  Widget _devicesCard(S s) {
+    final ThemeData t = Theme.of(context);
+    final ColorScheme cs = t.colorScheme;
+    final List<SourceDevice> found = _active.devices;
+
+    if (found.isEmpty) {
+      return AppCard(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        child: Row(
+          children: <Widget>[
+            Icon(
+              Icons.sensors_off_rounded,
+              size: 20,
+              color: cs.onSurfaceVariant,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                s.devicesEmpty,
+                style: t.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final List<SourceDevice> shown = found.take(5).toList();
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Column(
+        children: <Widget>[
+          for (int i = 0; i < shown.length; i++) ...<Widget>[
+            if (i > 0)
+              Divider(color: cs.outlineVariant.withValues(alpha: 0.6)),
+            _deviceRow(s, shown[i]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _deviceRow(S s, SourceDevice d) {
+    final ThemeData t = Theme.of(context);
+    final ColorScheme cs = t.colorScheme;
+    final bool current = d.id == _lastDeviceId;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 11),
+      child: Row(
+        children: <Widget>[
+          IconBadge(
+            icon: d.decoded
+                ? Icons.monitor_weight_outlined
+                : Icons.bluetooth_rounded,
+            tint: d.decoded ? cs.primary : cs.onSurfaceVariant,
+            size: 38,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  d.name.isEmpty ? s.noDeviceTag : d.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.textTheme.bodyMedium?.copyWith(
+                    fontWeight: current ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${d.id}  ·  ${d.rssi} dBm',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.textTheme.bodySmall?.copyWith(
+                    fontSize: 11,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (current)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Icon(Icons.check_circle, size: 16, color: cs.primary),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _logCard(S s) {
+    final ThemeData t = Theme.of(context);
+    final ColorScheme cs = t.colorScheme;
+    final List<String> logs = _active.logs;
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Text(
+                s.packets,
+                style: t.textTheme.labelMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '$_packetCount',
+                style: t.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (logs.isEmpty)
+            Text(
+              '--',
+              style: t.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            )
+          else
+            ...logs.reversed.take(8).map(
+                  (String line) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      line,
+                      style: t.textTheme.bodySmall?.copyWith(
+                        fontSize: 10,
+                        letterSpacing: 0.4,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+        ],
       ),
     );
   }

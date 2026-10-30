@@ -1,4 +1,4 @@
-package com.example.bodylog
+package top.xi_yun.litescale
 
 import io.flutter.embedding.android.FlutterActivity
 

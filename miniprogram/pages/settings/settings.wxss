@@ -1,0 +1,102 @@
+.row {
+  display: flex;
+  align-items: center;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.row-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.row-text {
+  flex: 1;
+  font-size: 30rpx;
+}
+
+.row-more {
+  font-size: 32rpx;
+  color: #b0b0b0;
+  padding: 0 12rpx;
+}
+
+.danger {
+  color: #d1495b;
+}
+
+.hint {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  color: #9a9aa5;
+}
+
+.avatar {
+  width: 60rpx;
+  height: 60rpx;
+  line-height: 60rpx;
+  text-align: center;
+  border-radius: 50%;
+  margin-right: 20rpx;
+  font-size: 30rpx;
+  background: #ede7f6;
+}
+
+.color-1 { background: #e3f2fd; }
+.color-2 { background: #e8f5e9; }
+.color-3 { background: #fff3e0; }
+.color-4 { background: #fce4ec; }
+.color-5 { background: #e0f7fa; }
+
+.check {
+  color: #6a4c93;
+  font-weight: 700;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.chip {
+  padding: 10rpx 28rpx;
+  margin: 0 12rpx 12rpx 0;
+  border-radius: 30rpx;
+  background: #f2f2f7;
+  color: #555;
+  font-size: 26rpx;
+}
+
+.chip-on {
+  background: #6a4c93;
+  color: #fff;
+}
+
+.input {
+  background: #f7f7fb;
+  border-radius: 12rpx;
+  padding: 18rpx 20rpx;
+  font-size: 30rpx;
+}
+
+.btn-save {
+  margin-top: 28rpx;
+  background: #6a4c93;
+  color: #fff;
+  border-radius: 40rpx;
+  font-size: 30rpx;
+}
+
+.btn-plain {
+  margin-top: 20rpx;
+  background: #f2f2f7;
+  color: #6a4c93;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+}

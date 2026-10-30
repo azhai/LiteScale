@@ -1,0 +1,34 @@
+.dev {
+  display: flex;
+  align-items: center;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #f0f0f4;
+}
+
+.dev:last-child {
+  border-bottom: none;
+}
+
+.dev-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.dev-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #22223b;
+}
+
+.dev-more {
+  font-size: 32rpx;
+  color: #b0b0b0;
+  padding: 0 12rpx;
+}
+
+.mono {
+  font-size: 22rpx;
+  color: #777;
+  word-break: break-all;
+}

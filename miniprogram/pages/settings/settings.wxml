@@ -1,0 +1,57 @@
+<view class="page">
+  <view class="card">
+    <view class="title">{{s.members}}</view>
+    <view class="row" wx:for="{{members}}" wx:key="id" data-id="{{item.id}}" bindtap="onMember">
+      <text class="avatar color-{{item.color}}">{{item.avatar}}</text>
+      <view class="row-main">
+        <text class="row-text">{{item.name}}</text>
+        <text class="muted" wx:if="{{item.active}}">{{s.activeMember}}</text>
+      </view>
+      <text class="row-more">⋯</text>
+    </view>
+    <button class="btn-plain" bindtap="addMember">+ {{s.addMember}}</button>
+  </view>
+
+  <view class="card">
+    <view class="title">{{s.data}}</view>
+    <view class="row" bindtap="onExport">
+      <text class="row-text">{{s.exportCsv}}</text>
+      <text class="muted">{{recordCount}} {{s.recordCount}}</text>
+    </view>
+    <view class="row" bindtap="onImport">
+      <text class="row-text">{{s.importCsv}}</text>
+    </view>
+    <view class="row" bindtap="onClear">
+      <text class="row-text danger">{{s.clearAll}}</text>
+    </view>
+    <text class="hint">{{s.avatarLocalOnly}}</text>
+  </view>
+
+  <view class="card">
+    <view class="title">{{s.height}}</view>
+    <input class="input" type="digit" value="{{height}}" bindinput="onHeight" />
+    <view class="title" style="margin-top:24rpx">{{s.goalWeight}} ({{unitLabel}})</view>
+    <input class="input" type="digit" value="{{goal}}" placeholder="{{s.goalHint}}" bindinput="onGoal" />
+    <button class="btn-save" bindtap="onSave">{{s.save}}</button>
+  </view>
+
+  <view class="card">
+    <view class="title">{{s.unit}}</view>
+    <view class="chips">
+      <text
+        wx:for="{{unitList}}"
+        wx:key="*this"
+        class="chip {{unit === item ? 'chip-on' : ''}}"
+        data-key="{{item}}"
+        bindtap="onUnit">{{item}}</text>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="title">{{s.language}}</view>
+    <view class="row" wx:for="{{langs}}" wx:key="key" data-key="{{item.key}}" bindtap="onLang">
+      <text class="row-text">{{item.name}}</text>
+      <text class="check" wx:if="{{lang === item.key}}">✓</text>
+    </view>
+  </view>
+</view>

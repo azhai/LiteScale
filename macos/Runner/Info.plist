@@ -28,5 +28,7 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>This app scans for Bluetooth LE advertisements from your body scale to read your weight.</string>
 </dict>
 </plist>

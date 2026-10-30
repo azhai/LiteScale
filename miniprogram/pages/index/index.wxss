@@ -1,0 +1,88 @@
+.status-line {
+  margin-top: 20rpx;
+  text-align: center;
+}
+
+.chips {
+  display: flex;
+  justify-content: center;
+  margin-top: 16rpx;
+}
+
+.chip {
+  padding: 6rpx 20rpx;
+  border-radius: 30rpx;
+  font-size: 24rpx;
+  margin: 0 8rpx;
+}
+
+.chip-green { background: #d7f5de; color: #1b7f3a; }
+.chip-orange { background: #ffe6c7; color: #a8600a; }
+.chip-purple { background: #ece3f7; color: #6a4c93; }
+
+.unit {
+  font-size: 32rpx;
+  font-weight: 500;
+}
+
+.mono {
+  font-size: 22rpx;
+  color: #555;
+  word-break: break-all;
+}
+
+.member-bar {
+  white-space: nowrap;
+  display: flex;
+}
+
+.member-chip {
+  display: inline-block;
+  padding: 10rpx 24rpx;
+  margin-right: 12rpx;
+  border-radius: 32rpx;
+  background: #f1f1f6;
+  color: #444;
+  font-size: 26rpx;
+}
+
+.member-chip-on {
+  background: #6a4c93;
+  color: #fff;
+}
+
+.dev-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid #f0f0f4;
+}
+
+.dev-row:last-child {
+  border-bottom: none;
+}
+
+.dev-main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dev-name {
+  font-size: 28rpx;
+  color: #22223b;
+}
+
+.dev-rssi {
+  font-size: 24rpx;
+  color: #a8600a;
+}
+
+.dev-rssi.ok {
+  color: #1b7f3a;
+}
+
+.dev-empty {
+  padding: 8rpx 0;
+}

@@ -1,0 +1,17 @@
+<view class="page">
+  <view class="card" wx:if="{{devices.length}}">
+    <view class="title">{{s.tabDevices}}</view>
+    <view class="dev" wx:for="{{devices}}" wx:key="id" data-id="{{item.id}}" bindtap="onDevice">
+      <view class="dev-main">
+        <text class="dev-name">{{item.name}}</text>
+        <text class="mono">{{s.deviceId}}: {{item.id}}</text>
+        <text class="muted">{{s.lastSeen}} {{item.seenText}} · {{s.recordCount}} {{item.count}}</text>
+      </view>
+      <text class="dev-more">⋯</text>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{!devices.length}}">
+    <text class="muted">{{s.devicesEmpty}}</text>
+  </view>
+</view>

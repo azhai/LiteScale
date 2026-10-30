@@ -1,5 +1,6 @@
 # Miscellaneous
 *.class
+*.lock
 *.log
 *.pyc
 *.swp
@@ -7,9 +8,12 @@
 .atom/
 .build/
 .buildlog/
+.codebuddy/
 .history
 .svn/
 .swiftpm/
+.trae/
+.workbuddy/
 migrate_working_dir/
 
 # IntelliJ related
@@ -43,3 +47,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Build artefacts
+dist/

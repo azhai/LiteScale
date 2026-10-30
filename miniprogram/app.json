@@ -1,0 +1,34 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/history/history",
+    "pages/devices/devices",
+    "pages/settings/settings"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#6A4C93",
+    "navigationBarTitleText": "LiteScale",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#F5F6FA",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#8A8A8A",
+    "selectedColor": "#6A4C93",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "Measure" },
+      { "pagePath": "pages/history/history", "text": "History" },
+      { "pagePath": "pages/devices/devices", "text": "Devices" },
+      { "pagePath": "pages/settings/settings", "text": "Settings" }
+    ]
+  },
+  "permission": {
+    "scope.bluetooth": {
+      "desc": "Used to scan Bluetooth advertisements from your body scale"
+    }
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2"
+}

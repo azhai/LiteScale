@@ -1,2 +1,6 @@
 #include "../../Flutter/Flutter-Release.xcconfig"
 #include "Warnings.xcconfig"
+
+// Architecture is injected by scripts/build_macos.sh (Arch.xcconfig is generated,
+// not checked in). Without it the build stays universal (x86_64 + arm64).
+#include? "Arch.xcconfig"

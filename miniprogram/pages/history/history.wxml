@@ -1,0 +1,63 @@
+<view class="page">
+  <scroll-view class="chip-row" scroll-x enable-flex>
+    <text
+      wx:for="{{memberChips}}"
+      wx:key="id"
+      class="chip {{item.on ? 'chip-on' : ''}}"
+      data-id="{{item.id}}"
+      bindtap="onMemberFilter">{{item.name}}</text>
+  </scroll-view>
+
+  <scroll-view class="chip-row" scroll-x enable-flex>
+    <text
+      wx:for="{{deviceChips}}"
+      wx:key="id"
+      class="chip {{item.on ? 'chip-on' : ''}}"
+      data-id="{{item.id}}"
+      bindtap="onDeviceFilter">{{item.name}}</text>
+  </scroll-view>
+
+  <view class="range">
+    <text
+      wx:for="{{rangeLabels}}"
+      wx:key="*this"
+      class="range-item {{rangeIndex === index ? 'range-item-on' : ''}}"
+      data-index="{{index}}"
+      bindtap="onRange">{{item}}</text>
+  </view>
+
+  <view class="card" wx:if="{{hasData}}">
+    <view class="title">{{s.trend}}</view>
+    <canvas type="2d" id="chart" class="chart"></canvas>
+    <view class="legend">
+      <text class="legend-line main"></text><text class="legend-text">{{s.trend}}</text>
+      <text class="legend-line avg"></text><text class="legend-text">{{s.movingAverage}}</text>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{stats.length}}">
+    <view class="title">{{s.statistics}}</view>
+    <view class="grid">
+      <view class="cell" wx:for="{{stats}}" wx:key="label">
+        <text class="cell-label">{{item.label}}</text>
+        <text class="cell-value">{{item.value}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{list.length}}">
+    <view class="row" wx:for="{{list}}" wx:key="t" data-t="{{item.t}}" bindtap="onRecordAction">
+      <view class="row-main">
+        <text class="row-weight">{{item.text}}</text>
+        <text class="muted">{{item.timeText}}</text>
+        <text class="row-sub">{{item.sub}}</text>
+      </view>
+      <text class="row-delta {{item.deltaDown ? 'down' : 'up'}}" wx:if="{{item.deltaText}}">{{item.deltaText}}</text>
+      <text class="row-more">⋯</text>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{!hasData}}">
+    <text class="muted">{{s.historyEmpty}}</text>
+  </view>
+</view>
