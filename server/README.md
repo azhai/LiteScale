@@ -87,7 +87,7 @@ make -C server run            # 127.0.0.1:9429，数据在 ./server/data
 ```json
 {
   "schema_version": 1,
-  "client":  {"id": "c-macos-1a2b3c4d", "name": "LiteScale · macOS", "app_version": "1.0.5", "platform": "macos", "lang": "zh"},
+  "client":  {"id": "c-macos-1a2b3c4d", "name": "LiteScale · macOS", "app_version": "1.0.6", "platform": "macos", "lang": "zh"},
   "devices": [{"id": "C0:FF:EE:12:34:56", "name": "OKOK S3", "last_seen": 1761792000000}],
   "members": [{"id": "me", "name": "我", "avatar": "🙂", "color": 0, "updated_at": 0}],
   "goal":    {"cleared": false, "member_id": "me", "kg": 68.5, "updated_at": 0},

@@ -41,7 +41,7 @@ done
 pass "server started"
 
 # ---- static + bootstrap ---------------------------------------------------
-curl -fsS "$BASE/api/v1/ping" | jassert "d['ok'] and d['version']=='1.0.5'"
+curl -fsS "$BASE/api/v1/ping" | jassert "d['ok'] and d['version']=='1.0.6'"
 pass "ping"
 
 eq "$(code "$BASE/admin/")" 200 "admin page"
@@ -54,7 +54,7 @@ eq "$(code "$BASE/api/v1/admin/overview")" 401 "admin requires token"
 # ---- register -------------------------------------------------------------
 python3 - "$DATA/reg.json" <<'PY'
 import json,sys
-json.dump({"id":"client-e2e-001","name":"端到端","app_version":"1.0.5","platform":"ios","lang":"zh"},
+json.dump({"id":"client-e2e-001","name":"端到端","app_version":"1.0.6","platform":"ios","lang":"zh"},
           open(sys.argv[1],"w"), ensure_ascii=False)
 PY
 curl -fsS -X POST "$BASE/api/v1/clients" -H 'Content-Type: application/json' \
@@ -71,7 +71,7 @@ python3 - "$DATA/batch1.json" <<'PY'
 import json,sys
 p = {
   "schema_version": 1,
-  "client": {"id":"client-e2e-001","name":"端到端","app_version":"1.0.5","platform":"ios","lang":"zh"},
+  "client": {"id":"client-e2e-001","name":"端到端","app_version":"1.0.6","platform":"ios","lang":"zh"},
   "devices": [{"id":"scale-1","name":"体脂秤","last_seen":1793332000000}],
   "members": [
     {"id":"m1","name":"阿债","avatar":"🐷","color":5337227,"updated_at":1793332000000},
@@ -107,7 +107,7 @@ python3 - "$DATA/batch2.json" <<'PY'
 import json,sys
 p = {
   "schema_version": 1,
-  "client": {"id":"client-e2e-001","name":"端到端","app_version":"1.0.5","platform":"ios","lang":"zh"},
+  "client": {"id":"client-e2e-001","name":"端到端","app_version":"1.0.6","platform":"ios","lang":"zh"},
   "devices": [], "members": [],
   "goal": {"cleared": False, "member_id": "m1", "kg": 70, "updated_at": 1793332000000},
   "records": [
@@ -135,7 +135,7 @@ python3 - "$DATA/batch3.json" <<'PY'
 import json,sys
 p = {
   "schema_version": 1,
-  "client": {"id":"other-client","name":"x","app_version":"1.0.5","platform":"ios","lang":"zh"},
+  "client": {"id":"other-client","name":"x","app_version":"1.0.6","platform":"ios","lang":"zh"},
   "devices": [], "members": [],
   "goal": {"cleared": False, "kg": 0, "updated_at": 0},
   "records": []
@@ -150,7 +150,7 @@ python3 - "$DATA/batch4.json" <<'PY'
 import json,sys
 p = {
   "schema_version": 1,
-  "client": {"id":"client-e2e-001","name":"端到端","app_version":"1.0.5","platform":"ios","lang":"zh"},
+  "client": {"id":"client-e2e-001","name":"端到端","app_version":"1.0.6","platform":"ios","lang":"zh"},
   "devices": [], "members": [],
   "goal": {"cleared": False, "kg": 0, "updated_at": 0},
   "records": [

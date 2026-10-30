@@ -3,7 +3,7 @@ package main
 import "core:fmt"
 import "core:os"
 
-VERSION :: "1.0.5"
+VERSION :: "1.0.6"
 
 Config :: struct {
 	addr:        string,
