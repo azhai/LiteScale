@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'service/app_controller.dart';
+import 'service/uploader.dart';
 import 'view/devices_page.dart';
 import 'view/history_page.dart';
 import 'view/home.dart';
@@ -8,10 +9,12 @@ import 'view/settings_page.dart';
 import 'view/theme.dart';
 
 final AppController app = AppController();
+final Uploader uploader = Uploader(app);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await app.init();
+  await uploader.init();
   runApp(const MyApp());
 }
 
@@ -67,7 +70,7 @@ class _MainShellState extends State<MainShell> {
       ScaleConnectPage(controller: app),
       HistoryPage(controller: app),
       DevicesPage(controller: app),
-      SettingsPage(controller: app),
+      SettingsPage(controller: app, uploader: uploader),
     ];
 
     return Scaffold(

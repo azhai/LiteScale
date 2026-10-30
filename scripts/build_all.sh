@@ -24,5 +24,11 @@ case "$(uname -s)" in
   *) log "Skipping desktop/mobile builds: unsupported host $(uname -s)" ;;
 esac
 
+if command -v odin >/dev/null 2>&1; then
+  "$SCRIPTS/build_server.sh"
+else
+  warn "odin not found; skipping litescale-server (set ODIN=/path/to/odin)"
+fi
+
 log "Artefacts in $DIST_DIR:"
 ls -lh "$DIST_DIR"

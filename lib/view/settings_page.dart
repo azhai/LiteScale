@@ -10,12 +10,18 @@ import '../service/app_controller.dart';
 import '../service/csv.dart';
 import '../service/file_saver.dart';
 import '../service/units.dart';
+import '../service/uploader.dart';
 import 'theme.dart';
 import 'widgets/app_widgets.dart';
 
 class SettingsPage extends StatefulWidget {
   final AppController controller;
-  const SettingsPage({super.key, required this.controller});
+  final Uploader uploader;
+  const SettingsPage({
+    super.key,
+    required this.controller,
+    required this.uploader,
+  });
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -24,6 +30,8 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _heightCtrl;
   late final TextEditingController _goalCtrl;
+  late final TextEditingController _urlCtrl;
+  late final TextEditingController _enrollCtrl;
 
   @override
   void initState() {
@@ -37,23 +45,28 @@ class _SettingsPageState extends State<SettingsPage> {
           ? ''
           : Units.toDisplay(goal, widget.controller.unit).toStringAsFixed(1),
     );
+    _urlCtrl = TextEditingController(text: widget.uploader.baseUrl);
+    _enrollCtrl = TextEditingController(text: widget.uploader.enrollKey);
   }
 
   @override
   void dispose() {
     _heightCtrl.dispose();
     _goalCtrl.dispose();
+    _urlCtrl.dispose();
+    _enrollCtrl.dispose();
     super.dispose();
   }
 
   AppController get c => widget.controller;
+  Uploader get u => widget.uploader;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(c.s.tabSettings)),
       body: AnimatedBuilder(
-        animation: c,
+        animation: Listenable.merge(<Listenable>[c, u]),
         builder: (BuildContext context, Widget? _) {
           final S s = c.s;
           return ListView(
@@ -76,6 +89,8 @@ class _SettingsPageState extends State<SettingsPage> {
               _appearanceCard(s),
               SectionHeader(title: s.data),
               _dataCard(s),
+              SectionHeader(title: s.upload),
+              _uploadCard(s),
               SectionHeader(title: s.about),
               _aboutCard(s),
             ],
@@ -466,6 +481,174 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
     );
+  }
+
+  // --- server upload -----------------------------------------------------
+
+  Widget _uploadCard(S s) {
+    final ThemeData t = Theme.of(context);
+    final ColorScheme cs = t.colorScheme;
+    final bool failed = u.error.isNotEmpty;
+
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(16, 4, 12, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: u.enabled,
+            onChanged: (bool v) => _toggleUpload(s, v),
+            secondary: const IconBadge(
+              icon: Icons.cloud_upload_outlined,
+              size: 38,
+            ),
+            title: Text(s.uploadSwitch),
+            subtitle: Text(
+              u.enabled ? s.uploadEnabledHint : s.uploadHint,
+              style: t.textTheme.bodySmall?.copyWith(
+                fontSize: 11,
+                color: cs.onSurfaceVariant,
+                height: 1.35,
+              ),
+            ),
+          ),
+          Divider(color: cs.outlineVariant.withValues(alpha: 0.6)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(0, 12, 4, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      SizedBox(
+                        width: 88,
+                        child: Text(s.serverUrl, style: t.textTheme.bodySmall),
+                      ),
+                      Flexible(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 320),
+                          child: TextField(
+                            controller: _urlCtrl,
+                            keyboardType: TextInputType.url,
+                            autocorrect: false,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              hintText: s.serverUrlHint,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
+                            ),
+                            onSubmitted: (String _) => _saveUpload(s),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: () => _saveUpload(s),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                        ),
+                        child: Text(s.save),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: <Widget>[
+                      SizedBox(
+                        width: 88,
+                        child: Text(
+                          s.enrollKeyLabel,
+                          style: t.textTheme.bodySmall,
+                        ),
+                      ),
+                      Flexible(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 200),
+                          child: TextField(
+                            controller: _enrollCtrl,
+                            autocorrect: false,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
+                            ),
+                            onSubmitted: (String _) => _saveUpload(s),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          _uploadStatus(s),
+                          style: t.textTheme.bodySmall?.copyWith(
+                            fontSize: 11,
+                            height: 1.35,
+                            color: failed ? cs.error : cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: u.busy ? null : () => u.relink(),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                        ),
+                        child: Text(s.relink),
+                      ),
+                      const SizedBox(width: 4),
+                      FilledButton.tonalIcon(
+                        onPressed: u.busy ? null : () => u.syncNow(),
+                        icon: const Icon(Icons.sync_rounded, size: 18),
+                        label: Text(s.syncNow),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _uploadStatus(S s) {
+    if (u.busy) return s.syncing;
+    if (u.error.isNotEmpty) return u.error;
+    if (u.lastSyncMs == 0) return s.neverSynced;
+    final DateTime at = DateTime.fromMillisecondsSinceEpoch(u.lastSyncMs);
+    final String time = TimeOfDay.fromDateTime(at).format(context);
+    return s.lastSyncAt(time);
+  }
+
+  Future<void> _toggleUpload(S s, bool value) async {
+    if (value && _urlCtrl.text.trim().isNotEmpty) {
+      await u.configure(url: _urlCtrl.text, enrollKey: _enrollCtrl.text);
+    }
+    await u.setEnabled(value);
+  }
+
+  Future<void> _saveUpload(S s) async {
+    if (_urlCtrl.text.trim().isEmpty) {
+      _snack(s.uploadNeedUrl);
+      return;
+    }
+    await u.configure(url: _urlCtrl.text, enrollKey: _enrollCtrl.text);
+    _urlCtrl.text = u.baseUrl;
+    _snack(s.saved);
   }
 
   // --- about -------------------------------------------------------------

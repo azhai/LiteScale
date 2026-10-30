@@ -49,4 +49,5 @@ app.*.map.json
 /android/app/release
 
 # Build artefacts
+data/
 dist/

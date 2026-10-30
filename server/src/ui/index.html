@@ -1,0 +1,1182 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>LiteScale 控制台</title>
+<link rel="icon" href="data:,">
+<style>
+:root{
+  --brand:#0E7C6B; --brand-deep:#0B6E5F; --mist:#BCF0E2; --amber:#9A6B12;
+  --bg:#F6FAF8; --surface:#FFFFFF;
+  --s1:#F1F8F5; --s2:#EAF3F0; --s3:#E3EFEB; --s4:#DCEAE5;
+  --outline:#C9DBD5; --outline-strong:#A8C4BC;
+  --text:#17322C; --muted:#4B605A; --faint:#768A85;
+  --danger-bg:#FBEAE7; --danger-fg:#8C2F1F; --danger-line:#F0CFC8;
+  --shadow-1:0 1px 2px rgba(17,60,52,.06),0 1px 3px rgba(17,60,52,.08);
+  --shadow-2:0 6px 20px rgba(17,60,52,.10),0 2px 6px rgba(17,60,52,.06);
+  --r-sm:8px; --r-md:12px; --r-lg:16px;
+}
+*{box-sizing:border-box}
+[x-cloak]{display:none!important}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font:13px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+.num{font-variant-numeric:tabular-nums}
+button,input,select{font:inherit;color:inherit}
+a{color:var(--brand-deep)}
+
+/* ---------- shell ---------- */
+.topbar{
+  position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:14px;
+  height:56px;padding:0 18px;background:rgba(246,250,248,.92);
+  backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--outline);
+}
+.brand{display:flex;align-items:baseline;gap:8px;font-weight:800;font-size:15px;letter-spacing:.2px}
+.mark{
+  width:12px;height:12px;border-radius:4px;background:linear-gradient(135deg,var(--brand),#35B79F);
+  box-shadow:0 0 0 3px var(--mist);display:inline-block;transform:translateY(1px);
+}
+.ver{font-weight:600;font-size:11px;color:var(--faint)}
+.tabs{display:flex;gap:2px;background:var(--s2);border-radius:999px;padding:3px}
+.tab{
+  border:0;background:transparent;color:var(--muted);height:28px;padding:0 14px;
+  border-radius:999px;font-size:12.5px;font-weight:600;cursor:pointer;width:auto;
+}
+.tab:hover{color:var(--brand-deep)}
+.tab.on{background:var(--surface);color:var(--brand-deep);box-shadow:var(--shadow-1)}
+.spacer{flex:1}
+.pill{
+  display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;
+  border-radius:999px;background:var(--s2);color:var(--muted);font-size:11.5px;font-weight:600;
+}
+.dot{width:7px;height:7px;border-radius:50%;background:#22A06B}
+.dot.off{background:#C0563F}
+
+/* ---------- buttons / inputs ---------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  height:32px;padding:0 13px;border-radius:999px;border:1px solid transparent;
+  background:var(--brand);color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;
+  width:auto;white-space:nowrap;transition:background .15s,box-shadow .15s,transform .05s;
+}
+.btn:hover{background:var(--brand-deep)}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.btn.ghost{background:var(--surface);color:var(--brand-deep);border-color:var(--outline)}
+.btn.ghost:hover{background:var(--s1);border-color:var(--outline-strong)}
+.btn.tonal{background:var(--mist);color:var(--brand-deep)}
+.btn.tonal:hover{background:#A9E8D8}
+.btn.danger{background:var(--danger-bg);color:var(--danger-fg);border-color:var(--danger-line)}
+.btn.danger:hover{background:#F6DAD4}
+.btn.sm{height:26px;padding:0 10px;font-size:11.5px}
+.btn.icon{width:30px;height:30px;padding:0}
+.input{
+  height:32px;padding:0 10px;border-radius:10px;border:1px solid var(--outline);
+  background:var(--surface);font-size:12.5px;width:auto;min-width:0;outline:none;
+  transition:border-color .15s,box-shadow .15s;
+}
+.input:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(14,124,107,.14)}
+.input::placeholder{color:var(--faint)}
+.input.search{width:210px}
+.input.num{width:104px}
+.input.date{width:140px}
+.input.token{width:270px}
+select.input{min-width:170px;padding-right:6px}
+label.field{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+label.field > span{white-space:nowrap}
+
+/* ---------- layout ---------- */
+.content{max-width:1320px;margin:0 auto;padding:18px 18px 56px}
+.stack{display:flex;flex-direction:column;gap:14px}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.row.end{justify-content:flex-end}
+.panel{
+  background:var(--surface);border:1px solid var(--outline);border-radius:var(--r-lg);
+  box-shadow:var(--shadow-1);overflow:hidden;
+}
+.panel-head{
+  display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--outline);
+}
+.panel-head h2{margin:0;font-size:13.5px;font-weight:800;letter-spacing:.2px}
+.panel-head .sub{color:var(--faint);font-size:11.5px}
+.panel-body{padding:14px 16px}
+.panel-body.flush{padding:0}
+.hint{color:var(--faint);font-size:11.5px;margin:0}
+
+/* ---------- overview ---------- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px}
+.stat{
+  background:var(--surface);border:1px solid var(--outline);border-radius:var(--r-md);
+  padding:12px 14px;cursor:pointer;transition:border-color .15s,box-shadow .15s;
+}
+.stat:hover{border-color:var(--outline-strong);box-shadow:var(--shadow-1)}
+.stat .k{color:var(--muted);font-size:11.5px;font-weight:600;letter-spacing:.2px}
+.stat .v{font-size:22px;font-weight:800;letter-spacing:-.3px;margin-top:2px}
+.stat .u{font-size:11px;color:var(--faint);font-weight:600;margin-left:3px}
+.stat.accent{background:linear-gradient(160deg,var(--mist),#DFF7EF);border-color:#A9E8D8}
+.stat.accent .v{color:var(--brand-deep)}
+
+/* ---------- tables ---------- */
+.table-wrap{overflow:auto;max-height:calc(100vh - 240px)}
+table.table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
+.table th{
+  position:sticky;top:0;z-index:1;text-align:left;font-weight:700;color:var(--muted);
+  background:var(--s1);border-bottom:1px solid var(--outline);padding:8px 12px;white-space:nowrap;
+}
+.table td{padding:8px 12px;border-bottom:1px solid #EDF4F1;vertical-align:middle}
+.table tbody tr:hover{background:var(--s1)}
+.table tbody tr.click{cursor:pointer}
+.table td.right,.table th.right{text-align:right}
+.table .muted{color:var(--faint)}
+.table .strong{font-weight:700}
+.chip{
+  display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;
+  background:var(--s3);color:var(--brand-deep);font-size:11px;font-weight:700;
+}
+.chip.warn{background:#FBF0DC;color:var(--amber)}
+.chip.gray{background:var(--s2);color:var(--muted)}
+.clip{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom}
+.empty{padding:34px 16px;text-align:center;color:var(--faint);font-size:12px}
+
+/* ---------- pager ---------- */
+.pager{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--outline);color:var(--muted);font-size:11.5px}
+.pager .spacer{flex:1}
+
+/* ---------- drawer ---------- */
+.scrim{position:fixed;inset:0;background:rgba(10,30,26,.35);z-index:40;backdrop-filter:blur(1px)}
+.drawer{
+  position:fixed;top:0;right:0;bottom:0;width:min(520px,94vw);z-index:41;
+  background:var(--bg);border-left:1px solid var(--outline);box-shadow:-18px 0 48px rgba(10,30,26,.16);
+  display:flex;flex-direction:column;
+}
+.drawer-head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--outline);background:var(--surface)}
+.drawer-head h3{margin:0;font-size:14px;font-weight:800}
+.drawer-body{overflow:auto;padding:16px 18px;display:flex;flex-direction:column;gap:14px}
+.section{background:var(--surface);border:1px solid var(--outline);border-radius:var(--r-md);padding:12px 14px}
+.section h4{margin:0 0 8px;font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.4px;text-transform:uppercase}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:4px 10px;font-size:12.5px}
+.kv dt{color:var(--faint)}
+.kv dd{margin:0;overflow:hidden;text-overflow:ellipsis}
+.member-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px dashed #E4EFEB}
+.member-row:first-of-type{border-top:0}
+.avatar{
+  width:28px;height:28px;border-radius:50%;display:grid;place-items:center;flex:none;
+  background:var(--s3);font-size:15px;overflow:hidden;
+}
+.avatar .swatch{width:100%;height:100%;border-radius:50%}
+.member-name{flex:1;min-width:0}
+.member-name b{font-size:12.5px}
+.member-name small{display:block;color:var(--faint);font-size:11px}
+.inline-form{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 0 2px}
+.danger-zone{border-color:var(--danger-line);background:#FFF8F6}
+.danger-zone h4{color:var(--danger-fg)}
+
+/* ---------- modal ---------- */
+.modal{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:20px}
+.modal-card{
+  width:min(520px,100%);max-height:calc(100vh - 40px);display:flex;flex-direction:column;
+  background:var(--bg);border:1px solid var(--outline);border-radius:var(--r-lg);
+  box-shadow:var(--shadow-2);overflow:hidden;
+}
+.modal-head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--outline);background:var(--surface)}
+.modal-head h3{margin:0;font-size:14px;font-weight:800}
+.modal-body{overflow:auto;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.modal-foot{display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid var(--outline);background:var(--surface)}
+.modal-foot .spacer{flex:1}
+.field-row{display:flex;flex-wrap:wrap;gap:10px}
+.field-row label.field{flex:1 1 140px}
+.field-row label.field .input{width:100%}
+.hint-line{font-size:11.5px;color:var(--faint);line-height:1.5}
+.reject-list{max-height:132px;overflow:auto;border:1px solid var(--outline);border-radius:var(--r-sm);background:var(--surface);padding:6px 9px;font-size:11.5px;color:var(--muted)}
+.reject-list div{padding:2px 0}
+.import-summary{display:flex;flex-wrap:wrap;gap:6px}
+.table .pick{width:28px;padding-right:0}
+.table .row-actions{display:flex;gap:6px;justify-content:flex-end;white-space:nowrap}
+.check{width:14px;height:14px;accent-color:var(--brand);cursor:pointer;vertical-align:middle}
+
+/* ---------- gate ---------- */
+.gate{min-height:calc(100vh - 56px);display:grid;place-items:center;padding:24px}
+.gate-card{
+  width:min(460px,100%);background:var(--surface);border:1px solid var(--outline);
+  border-radius:var(--r-lg);box-shadow:var(--shadow-2);padding:26px 26px 22px;
+}
+.gate-title{font-size:17px;font-weight:800;letter-spacing:-.2px}
+.gate-card .hint{margin:6px 0 14px}
+.gate-card .row{gap:8px}
+.err{color:var(--danger-fg);font-size:12px;margin-top:10px;min-height:16px}
+
+/* ---------- toast ---------- */
+.toast{
+  position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:60;
+  background:#14332C;color:#EAF7F2;padding:9px 16px;border-radius:999px;font-size:12.5px;
+  box-shadow:var(--shadow-2);max-width:80vw;
+}
+.toast.bad{background:#5A2118}
+
+/* ---------- skeleton ---------- */
+.loading-bar{height:2px;background:linear-gradient(90deg,transparent,var(--brand),transparent);animation:sweep 1.1s linear infinite}
+@keyframes sweep{0%{background-position:-40% 0}100%{background-position:140% 0}}
+@media (max-width:760px){
+  .topbar{height:auto;flex-wrap:wrap;padding:10px 12px;gap:8px}
+  .topbar .pill{display:none}
+  .tabs{order:3;flex-basis:100%}
+  .content{padding:12px}
+  .table-wrap{max-height:none}
+  .table{min-width:720px}
+  .input.search{width:160px}
+}
+</style>
+</head>
+<body x-data="adminApp()" x-init="init()">
+
+<header class="topbar">
+  <div class="brand"><span class="mark"></span>LiteScale<span class="ver" x-text="verText"></span></div>
+  <nav class="tabs" aria-label="主导航" x-show="token">
+    <button class="tab" :class="tab==='overview'&&'on'" @click="go('overview')">概览</button>
+    <button class="tab" :class="tab==='clients'&&'on'" @click="go('clients')">客户端</button>
+    <button class="tab" :class="tab==='measurements'&&'on'" @click="go('measurements')">测量</button>
+    <button class="tab" :class="tab==='batches'&&'on'" @click="go('batches')">批次</button>
+  </nav>
+  <div class="spacer"></div>
+  <span class="pill" x-show="token" title="服务端时间"><span class="dot" :class="online?'':'off'"></span><span class="num" x-text="clock"></span></span>
+  <button class="btn ghost sm" x-show="token" @click="refresh()" :disabled="loading">刷新</button>
+  <button class="btn ghost sm" x-show="token" @click="logout()">退出</button>
+</header>
+
+<div class="loading-bar" x-show="loading" x-cloak></div>
+
+<!-- token gate -->
+<div class="gate" x-show="!token" x-cloak>
+  <form class="gate-card" @submit.prevent="login()" autocomplete="off">
+    <div class="gate-title">LiteScale 控制台</div>
+    <p class="hint">粘贴服务端启动日志里的管理令牌（Bearer）。令牌只保存在本机 localStorage。</p>
+    <div class="row">
+      <input class="input token" type="password" x-model="tokenInput" placeholder="管理令牌" autocomplete="off" spellcheck="false">
+      <button class="btn" type="submit" :disabled="!tokenInput.trim()||loading">进入</button>
+    </div>
+    <div class="err" x-text="authError"></div>
+  </form>
+</div>
+
+<main class="content" x-show="token" x-cloak>
+  <div class="stack">
+
+    <!-- ============ overview ============ -->
+    <section x-show="tab==='overview'" class="stack">
+      <div class="stats">
+        <div class="stat accent" @click="go('clients')">
+          <div class="k">客户端</div><div class="v num" x-text="fmtInt(ov.clients)"></div>
+        </div>
+        <div class="stat" @click="go('measurements')">
+          <div class="k">测量记录</div><div class="v num" x-text="fmtInt(ov.measurements)"></div>
+        </div>
+        <div class="stat" @click="go('clients')">
+          <div class="k">成员</div><div class="v num" x-text="fmtInt(ov.members)"></div>
+        </div>
+        <div class="stat" @click="go('clients')">
+          <div class="k">设备</div><div class="v num" x-text="fmtInt(ov.devices)"></div>
+        </div>
+        <div class="stat" @click="go('batches')">
+          <div class="k">上传批次</div><div class="v num" x-text="fmtInt(ov.batches)"></div>
+        </div>
+        <div class="stat">
+          <div class="k">目标设置</div><div class="v num" x-text="fmtInt(ov.goals)"></div>
+        </div>
+        <div class="stat">
+          <div class="k">数据库</div><div class="v num" x-text="fmtBytes(ov.db_bytes)"></div>
+        </div>
+        <div class="stat">
+          <div class="k">最近上传</div><div class="v" style="font-size:13px;margin-top:6px" x-text="ov.last_batch_at?ago(ov.last_batch_at):'—'"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>最近批次</h2><span class="sub">按接收时间倒序</span>
+          <div class="spacer"></div>
+          <button class="btn ghost sm" @click="go('batches')">全部批次</button>
+        </div>
+        <div class="panel-body flush">
+          <table class="table">
+            <thead><tr>
+              <th>批次 ID</th><th>客户端</th><th>接收时间</th>
+              <th class="right">记录</th><th class="right">新增</th><th class="right">重复</th>
+            </tr></thead>
+            <tbody>
+              <template x-for="b in recentBatches" :key="b.id">
+                <tr>
+                  <td class="mono clip" :title="b.id" x-text="b.id"></td>
+                  <td class="mono clip" :title="b.client_id" x-text="b.client_id"></td>
+                  <td class="muted num" x-text="fmtTime(b.received_at)"></td>
+                  <td class="right num" x-text="b.records"></td>
+                  <td class="right num" x-text="b.accepted"></td>
+                  <td class="right num"><span class="chip" :class="b.duplicates?'warn':'gray'" x-text="b.duplicates"></span></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div class="empty" x-show="!recentBatches.length" x-cloak>还没有上传批次</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>最近测量</h2><div class="spacer"></div><button class="btn ghost sm" @click="go('measurements')">全部测量</button></div>
+        <div class="panel-body flush">
+          <table class="table">
+            <thead><tr><th>时间</th><th>客户端</th><th>成员</th><th>设备</th><th class="right">kg</th><th class="right">斤</th></tr></thead>
+            <tbody>
+              <template x-for="m in recentMeasurements" :key="m.uid">
+                <tr>
+                  <td class="num" x-text="fmtTime(m.ts_ms)"></td>
+                  <td class="mono clip" :title="m.client_id" x-text="m.client_id"></td>
+                  <td x-text="m.member_name||m.member_id"></td>
+                  <td class="muted" x-text="m.device_name||m.device_id||'—'"></td>
+                  <td class="right num strong" x-text="fmtKg(m.kg)"></td>
+                  <td class="right num muted" x-text="fmtJin(m.kg)"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div class="empty" x-show="!recentMeasurements.length" x-cloak>还没有测量数据</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ clients ============ -->
+    <section x-show="tab==='clients'" class="stack">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>客户端</h2><span class="sub" x-text="'共 '+fmtInt(clients.total)+' 个'"></span>
+          <div class="spacer"></div>
+          <input class="input search" type="search" x-model="clientQ" placeholder="搜索 ID / 名称" @keydown.enter="loadClients(0)">
+          <button class="btn ghost sm" @click="loadClients(0)">搜索</button>
+        </div>
+        <div class="panel-body flush">
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr>
+                <th>客户端</th><th>平台</th><th>版本</th>
+                <th class="right">测量</th><th class="right">成员</th><th class="right">设备</th>
+                <th class="right">最近体重</th><th>最近活跃</th>
+              </tr></thead>
+              <tbody>
+                <template x-for="c in clients.items" :key="c.id">
+                  <tr class="click" @click="openClient(c.id)">
+                    <td>
+                      <div class="strong" x-text="c.name||'(未命名)'"></div>
+                      <div class="mono muted clip" :title="c.id" x-text="c.id"></div>
+                    </td>
+                    <td><span class="chip" x-text="c.platform||'—'"></span></td>
+                    <td class="muted" x-text="c.app_version||'—'"></td>
+                    <td class="right num" x-text="fmtInt(c.measurements)"></td>
+                    <td class="right num" x-text="fmtInt(c.members)"></td>
+                    <td class="right num" x-text="fmtInt(c.devices)"></td>
+                    <td class="right num">
+                      <span x-show="c.last_kg>0" class="strong" x-text="fmtKg(c.last_kg)+' kg'"></span>
+                      <span x-show="!c.last_kg" class="muted">—</span>
+                    </td>
+                    <td class="muted num" x-text="c.last_seen_at?ago(c.last_seen_at):'—'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <div class="empty" x-show="!clients.items.length" x-cloak>没有匹配的客户端</div>
+          </div>
+        </div>
+        <div class="pager">
+          <span x-text="pageText(clients)"></span><div class="spacer"></div>
+          <button class="btn ghost sm" @click="loadClients(clients.offset-clients.limit)" :disabled="clients.offset<=0">上一页</button>
+          <button class="btn ghost sm" @click="loadClients(clients.offset+clients.limit)" :disabled="clients.offset+clients.limit>=clients.total">下一页</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ measurements ============ -->
+    <section x-show="tab==='measurements'" class="stack">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>测量</h2><span class="sub" x-text="'共 '+fmtInt(measures.total)+' 条'"></span>
+          <div class="spacer"></div>
+          <button class="btn danger sm" @click="bulkDelete()" :disabled="!selected.length" x-text="'删除所选'+(selected.length?' ('+selected.length+')':'')"></button>
+          <button class="btn tonal sm" @click="openImport()">导入 CSV</button>
+          <button class="btn tonal sm" @click="exportCsv()">导出 CSV</button>
+        </div>
+        <div class="panel-body">
+          <div class="row">
+            <label class="field"><span>客户端</span>
+              <select class="input" x-model="mf.client_id" @change="onFilterClient()">
+                <option value="">全部</option>
+                <template x-for="c in clientOptions" :key="c.id">
+                  <option :value="c.id" x-text="c.name?c.name+' · '+c.id:c.id"></option>
+                </template>
+              </select>
+            </label>
+            <label class="field"><span>成员</span>
+              <select class="input" x-model="mf.member_id">
+                <option value="">全部</option>
+                <template x-for="m in memberOptions" :key="m.id">
+                  <option :value="m.id" x-text="m.name+' · '+m.id"></option>
+                </template>
+              </select>
+            </label>
+            <label class="field"><span>关键词</span>
+              <input class="input search" type="search" x-model="mf.q" placeholder="成员 / 设备" @keydown.enter="loadMeasures(0)">
+            </label>
+            <label class="field"><span>从</span><input class="input date" type="date" x-model="mf.from"></label>
+            <label class="field"><span>到</span><input class="input date" type="date" x-model="mf.to"></label>
+            <button class="btn sm" @click="loadMeasures(0)">查询</button>
+            <button class="btn ghost sm" @click="resetMeasureFilters()">重置</button>
+          </div>
+        </div>
+        <div class="panel-body flush">
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr>
+                <th class="pick"><input class="check" type="checkbox" aria-label="全选本页"
+                  :checked="allSelected()" :indeterminate="someSelected()" @change="toggleAll($event.target.checked)"></th>
+                <th>测量时间</th><th>客户端</th><th>成员</th><th>设备</th>
+                <th class="right">kg</th><th class="right">斤</th><th>接收时间</th><th>批次</th><th></th>
+              </tr></thead>
+              <tbody>
+                <template x-for="m in measures.items" :key="m.uid">
+                  <tr>
+                    <td class="pick"><input class="check" type="checkbox" :aria-label="'选择 '+fmtTime(m.ts_ms)"
+                      :checked="selected.includes(m.uid)" @change="toggleOne(m.uid, $event.target.checked)"></td>
+                    <td class="num" x-text="fmtTime(m.ts_ms)"></td>
+                    <td class="mono clip" :title="m.client_id" x-text="m.client_id"></td>
+                    <td x-text="m.member_name||m.member_id"></td>
+                    <td class="muted" x-text="m.device_name||m.device_id||'—'"></td>
+                    <td class="right num strong" x-text="fmtKg(m.kg)"></td>
+                    <td class="right num muted" x-text="fmtJin(m.kg)"></td>
+                    <td class="muted num" x-text="fmtTime(m.received_at)"></td>
+                    <td class="mono muted clip" :title="m.batch_id" x-text="shortId(m.batch_id)"></td>
+                    <td><div class="row-actions"><button class="btn ghost sm" @click="openEdit(m)">编辑</button><button class="btn danger sm" @click="deleteMeasurement(m)">删除</button></div></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <div class="empty" x-show="!measures.items.length" x-cloak>没有匹配的测量记录</div>
+          </div>
+        </div>
+        <div class="pager">
+          <span x-text="pageText(measures)"></span><div class="spacer"></div>
+          <button class="btn ghost sm" @click="loadMeasures(measures.offset-measures.limit)" :disabled="measures.offset<=0">上一页</button>
+          <button class="btn ghost sm" @click="loadMeasures(measures.offset+measures.limit)" :disabled="measures.offset+measures.limit>=measures.total">下一页</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ batches ============ -->
+    <section x-show="tab==='batches'" class="stack">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>上传批次</h2><span class="sub" x-text="'共 '+fmtInt(batches.total)+' 个'"></span>
+          <div class="spacer"></div>
+          <label class="field"><span>客户端</span>
+            <select class="input" x-model="batchClient" @change="loadBatches(0)">
+              <option value="">全部</option>
+              <template x-for="c in clientOptions" :key="c.id">
+                <option :value="c.id" x-text="c.name?c.name+' · '+c.id:c.id"></option>
+              </template>
+            </select>
+          </label>
+        </div>
+        <div class="panel-body flush">
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr>
+                <th>批次 ID（幂等键）</th><th>客户端</th><th>接收时间</th>
+                <th class="right">记录</th><th class="right">新增</th><th class="right">重复</th><th>Body SHA-256</th>
+              </tr></thead>
+              <tbody>
+                <template x-for="b in batches.items" :key="b.id">
+                  <tr>
+                    <td class="mono clip" :title="b.id" x-text="b.id"></td>
+                    <td class="mono clip" :title="b.client_id" x-text="b.client_id"></td>
+                    <td class="num" x-text="fmtTime(b.received_at)"></td>
+                    <td class="right num" x-text="b.records"></td>
+                    <td class="right num" x-text="b.accepted"></td>
+                    <td class="right num"><span class="chip" :class="b.duplicates?'warn':'gray'" x-text="b.duplicates"></span></td>
+                    <td class="mono muted clip" :title="b.payload_sha256" x-text="shortId(b.payload_sha256)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <div class="empty" x-show="!batches.items.length" x-cloak>还没有批次</div>
+          </div>
+        </div>
+        <div class="pager">
+          <span x-text="pageText(batches)"></span><div class="spacer"></div>
+          <button class="btn ghost sm" @click="loadBatches(batches.offset-batches.limit)" :disabled="batches.offset<=0">上一页</button>
+          <button class="btn ghost sm" @click="loadBatches(batches.offset+batches.limit)" :disabled="batches.offset+batches.limit>=batches.total">下一页</button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<!-- ============ client drawer ============ -->
+<div class="scrim" x-show="showDetail" x-cloak @click="showDetail=false"></div>
+<aside class="drawer" x-show="showDetail" x-cloak>
+  <template x-if="showDetail">
+    <div class="drawer-head">
+      <div>
+        <h3 x-text="detail.client.name||'(未命名客户端)'"></h3>
+        <div class="mono muted" style="font-size:11px" x-text="detail.client.id"></div>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn ghost sm" @click="openClient(detail.client.id)">刷新</button>
+      <button class="btn ghost icon" @click="showDetail=false" aria-label="关闭">✕</button>
+    </div>
+  </template>
+  <div class="drawer-body" x-show="showDetail">
+    <div class="section" x-show="showDetail">
+      <h4>资料</h4>
+      <dl class="kv">
+        <dt>平台</dt><dd><span class="chip" x-text="detail.client.platform||'—'"></span></dd>
+        <dt>版本</dt><dd x-text="detail.client.app_version||'—'"></dd>
+        <dt>语言</dt><dd x-text="detail.client.lang||'—'"></dd>
+        <dt>首次注册</dt><dd x-text="fmtTime(detail.client.created_at)"></dd>
+        <dt>最近活跃</dt><dd x-text="fmtTime(detail.client.last_seen_at)"></dd>
+      </dl>
+      <div class="row" style="margin-top:10px">
+        <span class="pill">测量 <b class="num" x-text="detail.stats.measurements"></b></span>
+        <span class="pill">首条 <span x-text="detail.stats.first_ts?fmtDate(detail.stats.first_ts):'—'"></span></span>
+        <span class="pill">最近 <span x-text="detail.stats.last_ts?fmtDate(detail.stats.last_ts):'—'"></span></span>
+        <span class="pill">最近体重 <b x-text="detail.stats.last_kg?fmtKg(detail.stats.last_kg)+' kg':'—'"></b></span>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost sm" @click="filterByClient(detail.client.id)">查看该客户端测量</button>
+      </div>
+    </div>
+
+    <div class="section" x-show="showDetail">
+      <h4>目标</h4>
+      <div class="row">
+        <input class="input num" type="number" step="0.1" min="1" max="500" x-model="goalInput" placeholder="kg">
+        <button class="btn sm" @click="saveGoal()">保存</button>
+        <button class="btn ghost sm" @click="clearGoal()" :disabled="!detail.goal.set">清除</button>
+        <span class="hint" x-show="detail.goal.set" x-text="'当前 '+fmtKg(detail.goal.kg)+' kg · '+fmtJin(detail.goal.kg)+' 斤'"></span>
+        <span class="hint" x-show="!detail.goal.set">未设置目标</span>
+      </div>
+    </div>
+
+    <div class="section" x-show="showDetail">
+      <h4>成员 <span class="muted" style="font-weight:600;text-transform:none" x-text="'('+detail.members.length+')'"></span></h4>
+      <template x-for="m in detail.members" :key="m.id">
+        <div class="member-row">
+          <div class="avatar">
+            <template x-if="m.avatar && m.avatar.length<=2"><span x-text="m.avatar"></span></template>
+            <template x-if="!m.avatar || m.avatar.length>2"><span class="swatch" :style="'background:'+colorOf(m.color)"></span></template>
+          </div>
+          <div class="member-name">
+            <b x-text="m.name"></b>
+            <small><span class="mono" x-text="m.id"></span> · <span class="num" x-text="m.measurements"></span> 条 · <span x-text="fmtTime(m.updated_at)"></span></small>
+          </div>
+          <button class="btn ghost sm" @click="editMember(m)" x-show="!memberDraft">编辑</button>
+        </div>
+      </template>
+      <div class="empty" x-show="!detail.members.length" x-cloak>还没有成员数据</div>
+
+      <template x-if="memberDraft">
+        <form class="inline-form" @submit.prevent="saveMember()">
+          <input class="input" style="width:120px" x-model="memberDraft.name" placeholder="昵称" maxlength="128">
+          <input class="input" style="width:64px" x-model="memberDraft.avatar" placeholder="表情" maxlength="8">
+          <input class="input num" type="number" min="0" max="16777215" x-model="memberDraft.color" placeholder="颜色">
+          <button class="btn sm" type="submit" :disabled="!memberDraft.name.trim()">保存</button>
+          <button class="btn ghost sm" type="button" @click="memberDraft=null">取消</button>
+        </form>
+      </template>
+    </div>
+
+    <div class="section" x-show="showDetail">
+      <h4>设备 <span class="muted" style="font-weight:600;text-transform:none" x-text="'('+detail.devices.length+')'"></span></h4>
+      <template x-for="d in detail.devices" :key="d.id">
+        <div class="member-row">
+          <div class="avatar"><span class="swatch" style="background:var(--s4)"></span></div>
+          <div class="member-name">
+            <b x-text="d.name||d.id"></b>
+            <small class="mono" x-text="d.id"></small>
+          </div>
+          <small class="muted" x-text="d.last_seen?ago(d.last_seen):'—'"></small>
+        </div>
+      </template>
+      <div class="empty" x-show="!detail.devices.length" x-cloak>还没有设备数据</div>
+    </div>
+
+    <div class="section danger-zone" x-show="showDetail">
+      <h4>危险操作</h4>
+      <p class="hint" style="margin-bottom:8px">删除该客户端及其全部成员、设备、目标与测量数据，不可恢复。</p>
+      <button class="btn danger sm" @click="purgeClient()">删除全部数据</button>
+    </div>
+  </div>
+</aside>
+
+<!-- ============ edit measurement ============ -->
+<div class="scrim" x-show="!!editRow" x-cloak @click="editRow=null"></div>
+<div class="modal" x-show="!!editRow" x-cloak @click.self="editRow=null">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+    <div class="modal-head">
+      <div>
+        <h3 id="edit-title">编辑测量</h3>
+        <div class="mono muted" style="font-size:11px" x-text="editRow?editRow.uid:''"></div>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn ghost icon" @click="editRow=null" aria-label="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field-row">
+        <label class="field"><span>测量时间</span>
+          <input class="input" type="datetime-local" step="1" x-model="editDraft.when">
+        </label>
+        <label class="field"><span>体重（kg）</span>
+          <input class="input num" type="number" step="0.01" min="1" max="500" x-model="editDraft.kg">
+        </label>
+      </div>
+      <div class="row">
+        <span class="pill">折算 <b class="num" x-text="fmtJin(editDraft.kg)"></b> 斤</span>
+        <span class="pill gray" x-text="editRow?'客户端 '+editRow.client_id:''"></span>
+      </div>
+      <label class="field"><span>成员</span>
+        <select class="input" x-model="editDraft.member_id">
+          <template x-for="m in editMembers" :key="m.id">
+            <option :value="m.id" x-text="m.name+' · '+m.id"></option>
+          </template>
+        </select>
+      </label>
+      <div class="hint-line">保存后按客户端、成员、设备、时间与体重重新计算记录标识；与已有记录完全相同时会被拒绝。接收时间保持不变。</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost sm" @click="editRow=null">取消</button>
+      <div class="spacer"></div>
+      <button class="btn sm" @click="saveEdit()" :disabled="!editRow">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ import CSV ============ -->
+<div class="scrim" x-show="showImport" x-cloak @click="showImport=false"></div>
+<div class="modal" x-show="showImport" x-cloak @click.self="showImport=false">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="import-title">
+    <div class="modal-head">
+      <h3 id="import-title">导入 CSV</h3>
+      <div class="spacer"></div>
+      <button class="btn ghost icon" @click="showImport=false" aria-label="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="field"><span>默认客户端（CSV 缺少客户端列时使用）</span>
+        <select class="input" x-model="importClient">
+          <option value="">不使用默认客户端</option>
+          <template x-for="c in clientOptions" :key="c.id">
+            <option :value="c.id" x-text="c.name?c.name+' · '+c.id:c.id"></option>
+          </template>
+        </select>
+      </label>
+      <label class="field"><span>CSV 文件</span>
+        <input class="input" type="file" accept=".csv,text/csv" @change="pickImportFile($event)">
+      </label>
+      <div class="hint-line">表头需包含 ts_ms 与 kg 列，可选 client_id、member_id 或 member_name、device_id。客户端未知的行会被拒绝，不会自动创建客户端；重复记录自动跳过。</div>
+      <div x-show="importResult" x-cloak>
+        <div class="import-summary">
+          <span class="pill">总行 <b class="num" x-text="importResult?importResult.total:0"></b></span>
+          <span class="pill">新增 <b class="num" x-text="importResult?importResult.imported:0"></b></span>
+          <span class="pill">重复 <b class="num" x-text="importResult?importResult.duplicates:0"></b></span>
+          <span class="pill">新建成员 <b class="num" x-text="importResult?importResult.members_created:0"></b></span>
+          <span class="pill" :class="importResult&&importResult.rejected&&importResult.rejected.length&&'warn'">拒绝 <b class="num" x-text="importResult&&importResult.rejected?importResult.rejected.length:0"></b></span>
+        </div>
+        <div class="reject-list" x-show="importResult&&importResult.rejected&&importResult.rejected.length" style="margin-top:8px">
+          <template x-for="r in (importResult?importResult.rejected.slice(0,50):[])" :key="r.index+'-'+r.reason">
+            <div><span class="mono" x-text="'第 '+r.index+' 行'"></span> · <span x-text="r.reason"></span></div>
+          </template>
+        </div>
+      </div>
+      <div class="err" x-show="importError" x-cloak x-text="importError"></div>
+    </div>
+    <div class="modal-foot">
+      <span class="hint" x-show="importFile" x-text="importName"></span>
+      <div class="spacer"></div>
+      <button class="btn ghost sm" @click="showImport=false">关闭</button>
+      <button class="btn sm" @click="doImport()" :disabled="importRunning || !importFile" x-text="importRunning?'导入中…':'开始导入'"></button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" :class="toastBad&&'bad'" x-show="toast" x-cloak x-text="toast"></div>
+
+<script>
+window.adminApp = function () {
+  const EMPTY_PAGE = (limit) => ({ items: [], total: 0, limit: limit, offset: 0 });
+  return {
+    tab: 'overview',
+    token: localStorage.getItem('ls_admin_token') || '',
+    tokenInput: '',
+    authError: '',
+    loading: false,
+    online: false,
+    toast: '',
+    toastBad: false,
+    toastTimer: null,
+    clock: '',
+    verText: '',
+
+    ov: {},
+    recentBatches: [],
+    recentMeasurements: [],
+
+    clients: EMPTY_PAGE(25),
+    clientQ: '',
+    clientOptions: [],
+
+    measures: EMPTY_PAGE(50),
+    mf: { client_id: '', member_id: '', device_id: '', q: '', from: '', to: '' },
+    memberOptions: [],
+    selected: [],
+
+    editRow: null,
+    editDraft: { when: '', kg: '', member_id: '' },
+    editMembers: [],
+
+    showImport: false,
+    importClient: '',
+    importFile: null,
+    importName: '',
+    importResult: null,
+    importRunning: false,
+    importError: '',
+
+    batches: EMPTY_PAGE(25),
+    batchClient: '',
+
+    showDetail: false,
+    detail: { client: {}, members: [], devices: [], goal: { set: false, member_id: '', kg: 0, updated_at: 0 }, stats: {} },
+    goalInput: '',
+    memberDraft: null,
+
+    // ---------- lifecycle ----------
+    init() {
+      this.tick();
+      setInterval(() => this.tick(), 1000);
+      if (this.token) this.refresh();
+      else this.verText = '';
+    },
+    tick() {
+      const d = new Date();
+      this.clock = d.toLocaleTimeString('zh-CN', { hour12: false });
+    },
+    async login() {
+      this.authError = '';
+      this.token = this.tokenInput.trim();
+      if (!this.token) return;
+      try {
+        await this.api('/api/v1/admin/overview');
+        localStorage.setItem('ls_admin_token', this.token);
+        this.tokenInput = '';
+        await this.refresh();
+      } catch (e) {
+        this.token = '';
+        this.authError = '令牌无效或服务不可达';
+      }
+    },
+    logout() {
+      localStorage.removeItem('ls_admin_token');
+      this.token = '';
+      this.showDetail = false;
+      this.ov = {};
+    },
+
+    // ---------- http ----------
+    async api(path, opts) {
+      opts = opts || {};
+      const headers = Object.assign({ Authorization: 'Bearer ' + this.token }, opts.headers || {});
+      if (opts.body) headers['Content-Type'] = 'application/json';
+      const res = await fetch(path, Object.assign({}, opts, { headers }));
+      const ct = res.headers.get('content-type') || '';
+      const data = ct.indexOf('json') >= 0 ? await res.json() : await res.text();
+      if (res.status === 401) {
+        this.logout();
+        this.authError = '令牌已失效，请重新输入';
+        throw new Error('unauthorized');
+      }
+      if (!res.ok) throw new Error((data && data.error) || ('HTTP ' + res.status));
+      return data;
+    },
+    async guarded(fn) {
+      this.loading = true;
+      try { await fn(); this.online = true; }
+      catch (e) {
+        this.online = false;
+        if (String(e.message) !== 'unauthorized') this.flash(String(e.message || e), true);
+      } finally { this.loading = false; }
+    },
+
+    // ---------- navigation ----------
+    go(tab) {
+      this.tab = tab;
+      if (tab === 'overview') this.loadOverview();
+      if (tab === 'clients') this.loadClients(this.clients.offset);
+      if (tab === 'measurements') this.loadMeasures(this.measures.offset);
+      if (tab === 'batches') this.loadBatches(this.batches.offset);
+      window.scrollTo({ top: 0 });
+    },
+    refresh() {
+      this.go(this.tab);
+      this.loadClientOptions();
+    },
+
+    // ---------- loads ----------
+    async loadOverview() {
+      await this.guarded(async () => {
+        this.ov = await this.api('/api/v1/admin/overview');
+        this.verText = this.ov.version ? 'v' + this.ov.version : '';
+        const [b, m] = await Promise.all([
+          this.api('/api/v1/admin/batches?limit=8'),
+          this.api('/api/v1/admin/measurements?limit=8'),
+        ]);
+        this.recentBatches = b.items || [];
+        this.recentMeasurements = m.items || [];
+      });
+    },
+    async loadClientOptions() {
+      try {
+        const d = await this.api('/api/v1/admin/clients?limit=500');
+        this.clientOptions = d.items || [];
+      } catch (e) { /* gate handles 401 */ }
+    },
+    async loadClients(offset) {
+      this.clients.offset = Math.max(0, offset || 0);
+      await this.guarded(async () => {
+        const q = encodeURIComponent(this.clientQ.trim());
+        const d = await this.api('/api/v1/admin/clients?limit=' + this.clients.limit + '&offset=' + this.clients.offset + '&q=' + q);
+        this.clients.items = d.items || [];
+        this.clients.total = d.total || 0;
+      });
+    },
+    async openClient(id) {
+      await this.guarded(async () => {
+        const d = await this.api('/api/v1/admin/clients/' + encodeURIComponent(id));
+        this.detail = d;
+        this.showDetail = true;
+        this.goalInput = d.goal && d.goal.set ? Number(d.goal.kg.toFixed(2)) : '';
+        this.memberDraft = null;
+      });
+    },
+    async loadMeasures(offset) {
+      this.measures.offset = Math.max(0, offset || 0);
+      this.selected = [];
+      await this.guarded(async () => {
+        const d = await this.api('/api/v1/admin/measurements?' + this.measureQuery() +
+          '&limit=' + this.measures.limit + '&offset=' + this.measures.offset);
+        this.measures.items = d.items || [];
+        this.measures.total = d.total || 0;
+      });
+    },
+    async reloadMeasures() {
+      await this.loadMeasures(this.measures.offset);
+      if (!this.measures.items.length && this.measures.offset > 0) {
+        await this.loadMeasures(Math.max(0, this.measures.offset - this.measures.limit));
+      }
+    },
+    async loadBatches(offset) {
+      this.batches.offset = Math.max(0, offset || 0);
+      await this.guarded(async () => {
+        const cid = this.batchClient ? '&client_id=' + encodeURIComponent(this.batchClient) : '';
+        const d = await this.api('/api/v1/admin/batches?limit=' + this.batches.limit + '&offset=' + this.batches.offset + cid);
+        this.batches.items = d.items || [];
+        this.batches.total = d.total || 0;
+      });
+    },
+
+    // ---------- measurement filters ----------
+    measureQuery() {
+      const p = new URLSearchParams();
+      if (this.mf.client_id) p.set('client_id', this.mf.client_id);
+      if (this.mf.member_id) p.set('member_id', this.mf.member_id);
+      if (this.mf.device_id) p.set('device_id', this.mf.device_id);
+      if (this.mf.q.trim()) p.set('q', this.mf.q.trim());
+      if (this.mf.from) {
+        const t = new Date(this.mf.from + 'T00:00:00');
+        if (!isNaN(t)) p.set('from', Math.floor(t.getTime()));
+      }
+      if (this.mf.to) {
+        const t = new Date(this.mf.to + 'T00:00:00');
+        if (!isNaN(t)) p.set('to', Math.floor(t.getTime()) + 86400000 - 1);
+      }
+      return p.toString();
+    },
+    resetMeasureFilters() {
+      this.mf = { client_id: '', member_id: '', device_id: '', q: '', from: '', to: '' };
+      this.memberOptions = [];
+      this.loadMeasures(0);
+    },
+    async onFilterClient() {
+      this.mf.member_id = '';
+      this.memberOptions = [];
+      if (!this.mf.client_id) return;
+      try {
+        const d = await this.api('/api/v1/admin/clients/' + encodeURIComponent(this.mf.client_id));
+        this.memberOptions = (d.members || []).map((m) => ({ id: m.id, name: m.name }));
+      } catch (e) { /* ignore */ }
+    },
+    filterByClient(id) {
+      this.mf.client_id = id;
+      this.mf.member_id = '';
+      this.memberOptions = [];
+      this.showDetail = false;
+      this.go('measurements');
+      this.onFilterClient();
+    },
+    async exportCsv() {
+      await this.guarded(async () => {
+        const res = await fetch('/api/v1/admin/measurements.csv?' + this.measureQuery(), {
+          headers: { Authorization: 'Bearer ' + this.token },
+        });
+        if (!res.ok) throw new Error('导出失败 HTTP ' + res.status);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'litescale-measurements.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+        this.flash('已导出 CSV');
+      });
+    },
+    async deleteMeasurement(m) {
+      if (!confirm('删除这条测量记录？\n' + this.fmtTime(m.ts_ms) + ' · ' + this.fmtKg(m.kg) + ' kg')) return;
+      await this.guarded(async () => {
+        await this.api('/api/v1/admin/measurements?uid=' + encodeURIComponent(m.uid), { method: 'DELETE' });
+        this.flash('已删除 1 条测量');
+        await this.reloadMeasures();
+      });
+    },
+
+    // ---------- selection ----------
+    allSelected() {
+      return this.measures.items.length > 0 && this.selected.length === this.measures.items.length;
+    },
+    someSelected() {
+      return this.selected.length > 0 && !this.allSelected();
+    },
+    toggleOne(uid, on) {
+      this.selected = on ? Array.from(new Set(this.selected.concat([uid]))) : this.selected.filter((x) => x !== uid);
+    },
+    toggleAll(on) {
+      this.selected = on ? this.measures.items.map((m) => m.uid) : [];
+    },
+    async bulkDelete() {
+      const uids = this.selected.slice();
+      if (!uids.length) return;
+      if (!confirm('删除所选的 ' + uids.length + ' 条测量记录？此操作不可恢复。')) return;
+      await this.guarded(async () => {
+        const r = await this.api('/api/v1/admin/measurements', { method: 'DELETE', body: JSON.stringify({ uids: uids }) });
+        this.selected = [];
+        this.flash('已删除 ' + (r.deleted || 0) + ' 条测量');
+        await this.reloadMeasures();
+      });
+    },
+
+    // ---------- edit ----------
+    toLocalInput(ms) {
+      const d = new Date(Number(ms));
+      if (isNaN(d.getTime())) return '';
+      const p = (n) => String(n).padStart(2, '0');
+      return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+        'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+    },
+    async openEdit(m) {
+      this.editRow = m;
+      this.editDraft = { when: this.toLocalInput(m.ts_ms), kg: Number(Number(m.kg).toFixed(2)), member_id: m.member_id || '' };
+      this.editMembers = m.member_id ? [{ id: m.member_id, name: m.member_name || m.member_id }] : [];
+      try {
+        const d = await this.api('/api/v1/admin/clients/' + encodeURIComponent(m.client_id));
+        this.editMembers = (d.members || []).map((x) => ({ id: x.id, name: x.name }));
+      } catch (e) { /* keep the fallback list */ }
+    },
+    async saveEdit() {
+      const row = this.editRow;
+      if (!row) return;
+      const ts = new Date(this.editDraft.when).getTime();
+      if (!isFinite(ts)) { this.flash('测量时间格式不正确', true); return; }
+      const kg = Number(this.editDraft.kg);
+      if (!isFinite(kg) || kg <= 0 || kg > 500) { this.flash('体重需在 0–500 kg 之间', true); return; }
+      await this.guarded(async () => {
+        const r = await this.api('/api/v1/admin/measurements/' + encodeURIComponent(row.uid), {
+          method: 'PUT',
+          body: JSON.stringify({ ts_ms: ts, kg: kg, member_id: this.editDraft.member_id || '' }),
+        });
+        this.editRow = null;
+        this.flash(r.uid && r.uid !== row.uid ? '已保存（记录标识已更新）' : '已保存');
+        await this.reloadMeasures();
+      });
+    },
+
+    // ---------- import ----------
+    openImport() {
+      this.showImport = true;
+      this.importResult = null;
+      this.importError = '';
+      this.importClient = this.mf.client_id || '';
+      this.importFile = null;
+      this.importName = '';
+    },
+    pickImportFile(ev) {
+      const f = ev.target.files && ev.target.files[0];
+      this.importFile = f || null;
+      this.importName = f ? f.name : '';
+      this.importResult = null;
+      this.importError = '';
+    },
+    async doImport() {
+      if (!this.importFile) { this.flash('请选择 CSV 文件', true); return; }
+      this.importRunning = true;
+      this.importError = '';
+      this.importResult = null;
+      try {
+        const text = await this.importFile.text();
+        if (!text.trim()) throw new Error('CSV 文件为空');
+        const q = this.importClient ? '?client_id=' + encodeURIComponent(this.importClient) : '';
+        const res = await fetch('/api/v1/admin/measurements/import' + q, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.token, 'Content-Type': 'text/csv' },
+          body: text,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          this.logout();
+          this.authError = '令牌已失效，请重新输入';
+          throw new Error('unauthorized');
+        }
+        if (!res.ok) {
+          this.online = false;
+          throw new Error(data.error || ('HTTP ' + res.status));
+        }
+        this.online = true;
+        this.importResult = data;
+        this.flash('导入完成：新增 ' + (data.imported || 0) + ' 条，重复 ' + (data.duplicates || 0) + ' 条');
+        this.loadMeasures(0);
+      } catch (e) {
+        this.importError = String(e.message || e);
+      } finally {
+        this.importRunning = false;
+      }
+    },
+
+    // ---------- client detail actions ----------
+    editMember(m) {
+      this.memberDraft = { id: m.id, name: m.name, avatar: m.avatar || '', color: Number(m.color) || 0 };
+    },
+    async saveMember() {
+      if (!this.memberDraft || !this.detail) return;
+      const id = this.detail.client.id;
+      const body = {
+        name: this.memberDraft.name.trim(),
+        avatar: this.memberDraft.avatar || '',
+        color: Number(this.memberDraft.color) || 0,
+      };
+      if (!body.name) return;
+      await this.guarded(async () => {
+        await this.api('/api/v1/admin/clients/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(this.memberDraft.id), {
+          method: 'POST', body: JSON.stringify(body),
+        });
+        this.memberDraft = null;
+        this.flash('成员已更新');
+        await this.openClient(id);
+      });
+    },
+    async saveGoal() {
+      if (!this.detail) return;
+      const kg = Number(this.goalInput);
+      if (!isFinite(kg) || kg <= 0 || kg > 500) { this.flash('体重需在 0–500 kg 之间', true); return; }
+      const id = this.detail.client.id;
+      await this.guarded(async () => {
+        await this.api('/api/v1/admin/clients/' + encodeURIComponent(id) + '/goal', {
+          method: 'PUT', body: JSON.stringify({ cleared: false, kg: kg }),
+        });
+        this.flash('目标已更新');
+        await this.openClient(id);
+      });
+    },
+    async clearGoal() {
+      if (!this.detail) return;
+      const id = this.detail.client.id;
+      await this.guarded(async () => {
+        await this.api('/api/v1/admin/clients/' + encodeURIComponent(id) + '/goal', {
+          method: 'PUT', body: JSON.stringify({ cleared: true, kg: 0 }),
+        });
+        this.flash('目标已清除');
+        await this.openClient(id);
+      });
+    },
+    async purgeClient() {
+      if (!this.detail) return;
+      const id = this.detail.client.id;
+      const name = this.detail.client.name || id;
+      if (!confirm('永久删除「' + name + '」的全部数据？\n该操作会删除客户端、成员、设备、目标与全部测量记录。')) return;
+      await this.guarded(async () => {
+        const r = await this.api('/api/v1/admin/clients/' + encodeURIComponent(id), { method: 'DELETE' });
+        this.showDetail = false;
+        this.flash('已删除客户端及其 ' + (r.deleted || 0) + ' 条测量');
+        this.loadClients(0);
+        this.loadClientOptions();
+      });
+    },
+
+    // ---------- formatting ----------
+    fmtInt(n) { return (n == null ? 0 : Number(n)).toLocaleString('zh-CN'); },
+    fmtKg(v) { return (Number(v) || 0).toFixed(2); },
+    fmtJin(v) { return ((Number(v) || 0) * 2).toFixed(1); },
+    fmtBytes(n) {
+      n = Number(n) || 0;
+      if (n < 1024) return n + ' B';
+      if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+      if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+      return (n / 1073741824).toFixed(2) + ' GB';
+    },
+    fmtTime(ms) {
+      if (!ms) return '—';
+      return new Date(Number(ms)).toLocaleString('zh-CN', { hour12: false });
+    },
+    fmtDate(ms) {
+      if (!ms) return '—';
+      return new Date(Number(ms)).toLocaleDateString('zh-CN');
+    },
+    ago(ms) {
+      if (!ms) return '—';
+      const s = Math.max(0, (Date.now() - Number(ms)) / 1000);
+      if (s < 60) return '刚刚';
+      if (s < 3600) return Math.floor(s / 60) + ' 分钟前';
+      if (s < 86400) return Math.floor(s / 3600) + ' 小时前';
+      if (s < 86400 * 30) return Math.floor(s / 86400) + ' 天前';
+      return this.fmtDate(ms);
+    },
+    shortId(s) { return s && s.length > 14 ? s.slice(0, 8) + '…' + s.slice(-4) : (s || '—'); },
+    colorOf(color) {
+      const n = (Number(color) || 0) >>> 0;
+      const hex = ('000000' + n.toString(16)).slice(-6);
+      return '#' + hex;
+    },
+    pageText(p) {
+      if (!p.total) return '暂无数据';
+      const from = p.offset + 1;
+      const to = Math.min(p.offset + p.limit, p.total);
+      return '第 ' + from + '–' + to + ' 条，共 ' + p.total + ' 条';
+    },
+    flash(msg, bad) {
+      this.toast = msg;
+      this.toastBad = !!bad;
+      clearTimeout(this.toastTimer);
+      this.toastTimer = setTimeout(() => { this.toast = ''; }, 2600);
+    },
+  };
+};
+</script>
+<script src="/admin/alpine.js" defer></script>
+</body>
+</html>

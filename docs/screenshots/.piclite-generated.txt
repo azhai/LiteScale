@@ -1,0 +1,3 @@
+/opt/repos/LiteScale/docs/screenshots/ui-measure-piclite.webp
+/opt/repos/LiteScale/docs/screenshots/ui-measure-small-piclite.webp
+/opt/repos/LiteScale/docs/screenshots/ui-measure-small-piclite.png

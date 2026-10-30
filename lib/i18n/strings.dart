@@ -192,6 +192,22 @@ class S {
   String get heightCm => isZh ? '身高（厘米）' : 'Height (cm)';
   String get darkMode => isZh ? '深色模式' : 'Dark Mode';
   String get invalidNumber => isZh ? '请输入有效数字' : 'Please enter a valid number';
+  String get upload => isZh ? '上传到服务器' : 'Server upload';
+  String get uploadHint => isZh
+      ? '把所有成员、设备、目标和测量记录同步到自建服务器。只上传，不删除服务器上的数据。'
+      : 'Syncs members, devices, goal and measurements to your own server. Upload only — nothing on the server is deleted.';
+  String get uploadEnabledHint => isZh ? '开启后自动同步' : 'Auto-syncs once enabled';
+  String get uploadSwitch => isZh ? '开启上传' : 'Enable upload';
+  String get serverUrl => isZh ? '服务器地址' : 'Server URL';
+  String get serverUrlHint => 'https://scale.example.com';
+  String get enrollKeyLabel => isZh ? '注册码（可选）' : 'Enroll key (optional)';
+  String get syncNow => isZh ? '立即同步' : 'Sync now';
+  String get syncing => isZh ? '正在同步…' : 'Syncing...';
+  String get neverSynced => isZh ? '尚未同步' : 'Not synced yet';
+  String get relink => isZh ? '重新绑定' : 'Relink';
+  String get uploadNeedUrl => isZh ? '请先填写服务器地址' : 'Enter the server URL first';
+  String get clientIdLabel => isZh ? '客户端 ID' : 'Client ID';
+  String lastSyncAt(String time) => isZh ? '上次同步 $time' : 'Last synced $time';
   String get about => isZh ? '关于' : 'About';
   String get aboutBody => isZh
       ? '通过 BLE 广播读取体重，数据仅保存在本机。'

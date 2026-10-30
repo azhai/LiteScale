@@ -36,7 +36,7 @@ To build and run this project, you will need:
 
 ## How to Build Release Artefacts
 
-Version and build number live in `pubspec.yaml` (`version: 1.0.3+4`). Every script
+Version and build number live in `pubspec.yaml` (`version: 1.0.5+5`). Every script
 sources `scripts/common.sh`, which derives the names from the project itself
 instead of hard-coded strings, so a rename does not require touching the scripts:
 
@@ -51,12 +51,12 @@ also warns when a platform folder still carries an identifier from a previous
 project name.
 
 ```bash
-./scripts/build_android.sh      # dist/LiteScale-1.0.3-android-arm64-v8a.apk
-./scripts/build_ios.sh          # dist/LiteScale-1.0.3-ios-arm64-unsigned.ipa (Mac + Xcode)
-./scripts/build_macos.sh arm64  # dist/LiteScale-1.0.3-macos-arm64.dmg        (Mac only)
-./scripts/build_macos.sh x64    # dist/LiteScale-1.0.3-macos-x64.dmg          (Mac only)
+./scripts/build_android.sh      # dist/LiteScale-1.0.5-android-arm64-v8a.apk
+./scripts/build_ios.sh          # dist/LiteScale-1.0.5-ios-arm64-unsigned.ipa (Mac + Xcode)
+./scripts/build_macos.sh arm64  # dist/LiteScale-1.0.5-macos-arm64.dmg        (Mac only)
+./scripts/build_macos.sh x64    # dist/LiteScale-1.0.5-macos-x64.dmg          (Mac only)
 ./scripts/build_macos.sh universal
-./scripts/build_windows.sh      # dist/LiteScale-1.0.3-windows-x64.zip        (Windows + MSVC only)
+./scripts/build_windows.sh      # dist/LiteScale-1.0.5-windows-x64.zip        (Windows + MSVC only)
 ./scripts/build_all.sh          # every target possible on this host
 ```
 
@@ -122,6 +122,23 @@ canvas weight chart.
 * Bluetooth scanning only works on a real device, not in the DevTools simulator.
 * Protocol changes must be applied twice: `miniprogram/utils/protocol.js`
   (`parseAdvertisement`) and `lib/source/ble_adv_source.dart`.
+
+## Server Upload (optional)
+
+Settings ▸ **Server upload** syncs members, devices, goal and measurements to a
+self-hosted server. The server is written in Odin on top of `opus` + `oboe`, with
+SQLite as the system of record: see [`server/README.md`](server/README.md) for the
+wire format, integrity checks, deduplication, admin console and deployment notes.
+
+```bash
+make -C server build && make -C server run   # http://127.0.0.1:9429/admin/
+```
+
+* Upload is opt-in and off by default; nothing leaves the device until enabled.
+* Every batch carries `X-Body-Sha256` and a body-derived `X-Idempotency-Key`, so
+  retries are exactly-once; measurements also get a content-derived server-side UID.
+* Upload is append-only: clearing history locally does not delete server data.
+  Removing a client (and all its data) is done from the admin console.
 
 ## Data Sources
 

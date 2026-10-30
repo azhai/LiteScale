@@ -4,4 +4,7 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Local dev syncs against http://<lan-ip>:9429; release builds keep
+         cleartext disabled. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>
