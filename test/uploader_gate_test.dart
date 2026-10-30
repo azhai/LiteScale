@@ -31,6 +31,9 @@ void main() {
     addTearDown(uploader.dispose);
 
     await uploader.init();
+    expect(uploader.baseUrl, kDefaultServerUrl);
+    await uploader.configure(url: '  ');
+    expect(uploader.baseUrl, kDefaultServerUrl);
     await uploader.configure(url: 'https://example.invalid');
     await uploader.configure(url: 'https://example.invalid', enrollKey: 'k');
     await uploader.setEnabled(false);
@@ -43,7 +46,7 @@ void main() {
     expect(client.calls, 0);
   });
 
-  test('enabled without a URL reports an error and stays offline', () async {
+  test('enabled without configuration targets the built-in server', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final AppController app = AppController();
     await app.init();
@@ -52,8 +55,9 @@ void main() {
     addTearDown(uploader.dispose);
 
     await uploader.init();
+    expect(uploader.baseUrl, kDefaultServerUrl);
     await uploader.setEnabled(true);
+    expect(client.calls, greaterThan(0));
     expect(uploader.error, isNotEmpty);
-    expect(client.calls, 0);
   });
 }

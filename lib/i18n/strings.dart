@@ -199,13 +199,12 @@ class S {
   String get uploadEnabledHint => isZh ? '开启后自动同步' : 'Auto-syncs once enabled';
   String get uploadSwitch => isZh ? '开启上传' : 'Enable upload';
   String get serverUrl => isZh ? '服务器地址' : 'Server URL';
-  String get serverUrlHint => 'https://scale.example.com';
+  String get serverUrlHint => 'https://sc.xi-yun.top/';
   String get enrollKeyLabel => isZh ? '注册码（可选）' : 'Enroll key (optional)';
   String get syncNow => isZh ? '立即同步' : 'Sync now';
   String get syncing => isZh ? '正在同步…' : 'Syncing...';
   String get neverSynced => isZh ? '尚未同步' : 'Not synced yet';
   String get relink => isZh ? '重新绑定' : 'Relink';
-  String get uploadNeedUrl => isZh ? '请先填写服务器地址' : 'Enter the server URL first';
   String get clientIdLabel => isZh ? '客户端 ID' : 'Client ID';
   String lastSyncAt(String time) => isZh ? '上次同步 $time' : 'Last synced $time';
   String get about => isZh ? '关于' : 'About';

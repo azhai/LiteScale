@@ -635,17 +635,13 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _toggleUpload(S s, bool value) async {
-    if (value && _urlCtrl.text.trim().isNotEmpty) {
+    if (value) {
       await u.configure(url: _urlCtrl.text, enrollKey: _enrollCtrl.text);
     }
     await u.setEnabled(value);
   }
 
   Future<void> _saveUpload(S s) async {
-    if (_urlCtrl.text.trim().isEmpty) {
-      _snack(s.uploadNeedUrl);
-      return;
-    }
     await u.configure(url: _urlCtrl.text, enrollKey: _enrollCtrl.text);
     _urlCtrl.text = u.baseUrl;
     _snack(s.saved);

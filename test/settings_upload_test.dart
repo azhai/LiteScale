@@ -13,9 +13,8 @@ void main() {
     await app.init();
     final Uploader uploader = Uploader(app);
     addTearDown(uploader.dispose);
-    // Enabled without a URL: sync fails fast, no network is touched.
-    await uploader.setEnabled(true);
-    expect(uploader.error, isNotEmpty);
+    await uploader.init();
+    expect(uploader.baseUrl, kDefaultServerUrl);
 
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1;
@@ -38,6 +37,7 @@ void main() {
 
     expect(find.text('Enable upload'), findsOneWidget);
     expect(find.text('Sync now'), findsOneWidget);
+    expect(find.text(kDefaultServerUrl), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

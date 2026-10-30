@@ -16,6 +16,9 @@ const String kClientAppVersion = '1.0.5';
 const int kSchemaVersion = 1;
 const int kMaxRecordsPerBatch = 300;
 
+/// Used when the user never configured a server; HTTPS on the default port.
+const String kDefaultServerUrl = 'https://sc.xi-yun.top';
+
 /// Uploads members, devices, goal and measurements to a self-hosted
 /// LiteScale server. Records are sent as a cursor-ordered stream; every batch
 /// carries the same `X-Body-Sha256` header and a body-derived idempotency key,
@@ -68,7 +71,7 @@ class Uploader extends ChangeNotifier {
     _prefs = await SharedPreferences.getInstance();
     final SharedPreferences p = _prefs!;
     _enabled = p.getBool(_kEnabled) ?? false;
-    _baseUrl = p.getString(_kUrl) ?? '';
+    _baseUrl = p.getString(_kUrl) ?? kDefaultServerUrl;
     _enrollKey = p.getString(_kEnroll) ?? '';
     _clientId = p.getString(_kClientId) ?? '';
     _token = p.getString(_kToken) ?? '';
@@ -106,7 +109,8 @@ class Uploader extends ChangeNotifier {
 
   /// Saves the server address; a different host invalidates the old token.
   Future<void> configure({required String url, String? enrollKey}) async {
-    final String normalized = _normalizeUrl(url);
+    final String normalized =
+        _normalizeUrl(url.trim().isEmpty ? kDefaultServerUrl : url);
     final bool hostChanged = normalized != _tokenUrl && normalized != _baseUrl;
     _baseUrl = normalized;
     if (enrollKey != null) _enrollKey = enrollKey.trim();

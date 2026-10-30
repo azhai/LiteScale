@@ -135,6 +135,8 @@ make -C server build && make -C server run   # http://127.0.0.1:9429/admin/
 ```
 
 * Upload is opt-in and off by default; nothing leaves the device until enabled.
+* The server address defaults to `https://sc.xi-yun.top/` (HTTPS on port 443);
+  change it in Settings to use your own deployment.
 * Every batch carries `X-Body-Sha256` and a body-derived `X-Idempotency-Key`, so
   retries are exactly-once; measurements also get a content-derived server-side UID.
 * Upload is append-only: clearing history locally does not delete server data.
