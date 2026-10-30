@@ -248,10 +248,10 @@ eq "$(code -X DELETE "$BASE/api/v1/admin/measurements" -H "Authorization: Bearer
 pass "bulk delete cap enforced"
 
 cat >"$DATA/import.csv" <<'CSV'
-ts_ms,kg,client_id,member_id,member_name,device_id
-1793332000000,70.10,client-e2e-001,m2,小美,scale-1
-1793332100000,70.05,,m1,阿债(改),scale-1
-1793332200000,70.00,unknown-client,m1,x,
+timestamp,client_id,device_id,member_id,member_name,weight_kg
+1793332000,client-e2e-001,scale-1,m2,小美,70.10
+1793332100000,,scale-1,m1,阿债(改),70.05
+1793332200,unknown-client,scale-1,m1,x,70.00
 CSV
 admin -X POST "$BASE/api/v1/admin/measurements/import?client_id=client-e2e-001" \
 	-H 'Content-Type: text/csv' --data-binary @"$DATA/import.csv" >"$DATA/imp.json"

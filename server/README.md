@@ -122,7 +122,7 @@ make -C server run            # 127.0.0.1:9429，数据在 ./server/data
 | `DELETE` | `/api/v1/admin/measurements`（JSON `{"uids":[...]}`，≤500） | 批量删除，返回实际删除数 |
 | `POST` | `/api/v1/admin/measurements/import?client_id=...` | 原始 CSV 请求体；`client_id` 作为缺省客户端；返回 `total/imported/duplicates/members_created/rejected[{index,reason}]` |
 
-CSV 表头需含 `ts_ms`（别名 `t`、`timestamp_ms`）与 `kg`（别名 `weight_kg`），可选 `client_id`、`member_id`、`member_name`、`device_id`。页面资源（Alpine.js 3.17.5）已内嵌进二进制，修改 `src/ui/` 后需 `make build` 重新编译。
+CSV 表头需含时间列（`ts_ms`，别名 `ts`、`t`、`timestamp`、`timestamp_ms`、`time`）与体重列（`kg`，别名 `weight_kg`、`weight`），时间戳可为毫秒或秒，可选 `client_id`、`member_id`、`member_name`、`device_id`。页面资源（Alpine.js 3.17.5）已内嵌进二进制，修改 `src/ui/` 后需 `make build` 重新编译。
 
 ## 部署
 

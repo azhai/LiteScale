@@ -1159,9 +1159,9 @@ csv_header_index :: proc(fields: []string) -> CSV_Columns {
 			name = strings.trim_prefix(name, "\xEF\xBB\xBF")
 		}
 		switch name {
-		case "ts_ms", "t", "timestamp_ms":
+		case "ts_ms", "ts", "t", "timestamp_ms", "timestamp", "time":
 			cols.ts = i
-		case "kg", "weight_kg":
+		case "kg", "weight_kg", "weight":
 			cols.kg = i
 		case "client_id":
 			cols.client = i
@@ -1331,7 +1331,7 @@ handle_admin_measurements_import :: proc(req: ^web.Request, res: ^web.Response) 
 			cols = csv_header_index(fields[:])
 			header_seen = true
 			if !cols.valid {
-				fail(res, .Bad_Request, "CSV needs a ts_ms and a kg column")
+				fail(res, .Bad_Request, "CSV needs a timestamp (ts_ms/timestamp/t) and a weight (kg/weight_kg) column")
 				return
 			}
 			continue
@@ -1342,6 +1342,10 @@ handle_admin_measurements_import :: proc(req: ^web.Request, res: ^web.Response) 
 		out.total += 1
 
 		ts, ts_ok := strconv.parse_i64(csv_field(fields[:], cols.ts))
+		// Accept epoch seconds as well as milliseconds (946684800 = 2000-01-01).
+		if ts_ok && ts >= 946684800 && ts < 100_000_000_000 {
+			ts *= 1000
+		}
 		if !ts_ok || ts < min_ts || ts > future {
 			append(&out.rejected, Rejected{index = lineno + 1, reason = "bad timestamp"})
 			continue

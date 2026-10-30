@@ -682,7 +682,7 @@ table.table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5p
       <label class="field"><span>CSV 文件</span>
         <input class="input" type="file" accept=".csv,text/csv" @change="pickImportFile($event)">
       </label>
-      <div class="hint-line">表头需包含 ts_ms 与 kg 列，可选 client_id、member_id 或 member_name、device_id。客户端未知的行会被拒绝，不会自动创建客户端；重复记录自动跳过。</div>
+      <div class="hint-line">表头需包含时间（ts_ms / timestamp / t）与体重（kg / weight_kg）列，可选 client_id、member_id 或 member_name、device_id；时间支持毫秒或秒级时间戳。客户端未知的行会被拒绝，不会自动创建客户端；重复记录自动跳过。</div>
       <div x-show="importResult" x-cloak>
         <div class="import-summary">
           <span class="pill">总行 <b class="num" x-text="importResult?importResult.total:0"></b></span>
