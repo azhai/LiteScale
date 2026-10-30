@@ -36,7 +36,7 @@ To build and run this project, you will need:
 
 ## How to Build Release Artefacts
 
-Version and build number live in `pubspec.yaml` (`version: 1.0.5+5`). Every script
+Version and build number live in `pubspec.yaml` (`version: 1.0.6+6`). Every script
 sources `scripts/common.sh`, which derives the names from the project itself
 instead of hard-coded strings, so a rename does not require touching the scripts:
 
@@ -51,12 +51,12 @@ also warns when a platform folder still carries an identifier from a previous
 project name.
 
 ```bash
-./scripts/build_android.sh      # dist/LiteScale-1.0.5-android-arm64-v8a.apk
-./scripts/build_ios.sh          # dist/LiteScale-1.0.5-ios-arm64-unsigned.ipa (Mac + Xcode)
-./scripts/build_macos.sh arm64  # dist/LiteScale-1.0.5-macos-arm64.dmg        (Mac only)
-./scripts/build_macos.sh x64    # dist/LiteScale-1.0.5-macos-x64.dmg          (Mac only)
+./scripts/build_android.sh      # dist/LiteScale-1.0.6-android-arm64-v8a.apk
+./scripts/build_ios.sh          # dist/LiteScale-1.0.6-ios-arm64-unsigned.ipa (Mac + Xcode)
+./scripts/build_macos.sh arm64  # dist/LiteScale-1.0.6-macos-arm64.dmg        (Mac only)
+./scripts/build_macos.sh x64    # dist/LiteScale-1.0.6-macos-x64.dmg          (Mac only)
 ./scripts/build_macos.sh universal
-./scripts/build_windows.sh      # dist/LiteScale-1.0.5-windows-x64.zip        (Windows + MSVC only)
+./scripts/build_windows.sh      # dist/LiteScale-1.0.6-windows-x64.zip        (Windows + MSVC only)
 ./scripts/build_all.sh          # every target possible on this host
 ```
 

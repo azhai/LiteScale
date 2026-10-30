@@ -12,7 +12,7 @@ import '../model/weight_record.dart';
 import 'app_controller.dart';
 
 /// Keep in sync with the `version:` field in pubspec.yaml.
-const String kClientAppVersion = '1.0.5';
+const String kClientAppVersion = '1.0.6';
 const int kSchemaVersion = 1;
 const int kMaxRecordsPerBatch = 300;
 

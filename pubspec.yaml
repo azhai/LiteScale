@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.5+5
+version: 1.0.6+6
 
 environment:
   sdk: ^3.8.0
@@ -74,11 +74,14 @@ flutter_launcher_icons:
   web:
     generate: true
     image_path: "app-icon-1024.png"
-    background_color: "#0E4C8A"
-    theme_color: "#0E4C8A"
+    background_color: "#228A74"
+    theme_color: "#228A74"
   min_sdk_android: 21
-  adaptive_icon_background: "#0E4C8A"
-  adaptive_icon_foreground: "app-icon-1024.png"
+  # Android adaptive icons need the artwork split in two layers: the gradient
+  # backdrop and the scale plate, so the launcher can parallax them. Both are
+  # derived from app-logo.png by scripts/icon_from_logo.py.
+  adaptive_icon_background: "assets/icon/adaptive-background.png"
+  adaptive_icon_foreground: "assets/icon/adaptive-foreground.png"
   remove_alpha_ios: true
 
 # For information on the generic Dart part of this file, see the
