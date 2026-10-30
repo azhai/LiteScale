@@ -57,6 +57,8 @@ project name.
 ./scripts/build_macos.sh x64    # dist/LiteScale-1.0.6-macos-x64.dmg          (Mac only)
 ./scripts/build_macos.sh universal
 ./scripts/build_windows.sh      # dist/LiteScale-1.0.6-windows-x64.zip        (Windows + MSVC only)
+./scripts/build_server.sh       # dist/litescale-server-1.0.6-<os>-<arch>     (Odin, native host)
+./scripts/build_server_linux.sh # dist/litescale-server-1.0.6-linux-x64       (any host with zig)
 ./scripts/build_all.sh          # every target possible on this host
 ```
 
@@ -86,6 +88,16 @@ Notes:
   `flutter build ipa` (set `EXPORT_METHOD=ad-hoc|app-store` for other flows).
   Both modes need Xcode's iOS platform component installed
   (Xcode ▸ Settings ▸ Components, or `xcodebuild -downloadPlatform iOS`).
+* **Linux server** is cross-compiled from macOS (or any host with Odin + zig).
+  Odin emits a `linux_amd64` object, then zig links it against musl plus
+  statically built sqlite3 (3.46.0 amalgamation) and zlib (1.3.2), because the
+  server calls `system:sqlite3` and zlib's `uncompress`. The result is one static
+  ELF with no dependencies on the target host — no `libsqlite3-dev`, no glibc
+  version coupling. Sources are pinned by checksum and cached under
+  `build/linux-cross/`; `LINUX_TARGET` / `LINUX_ARCH` switch it to arm64:
+  ```bash
+  LINUX_TARGET=aarch64-linux-musl LINUX_ARCH=arm64 ./scripts/build_server_linux.sh
+  ```
 * **Windows** cannot be cross-compiled: run `build_windows.sh` on a Windows machine
   with Visual Studio (Desktop development with C++). The zip contains
   `LiteScale.exe` plus the Flutter runtime DLLs and `data/`.

@@ -26,6 +26,13 @@ esac
 
 if command -v odin >/dev/null 2>&1; then
   "$SCRIPTS/build_server.sh"
+  # Linux is cross-compiled from any host: Odin emits the object, zig links it
+  # against musl + static sqlite3/zlib. See build_server_linux.sh.
+  if command -v zig >/dev/null 2>&1; then
+    "$SCRIPTS/build_server_linux.sh"
+  else
+    warn "zig not found; skipping the Linux cross build of litescale-server"
+  fi
 else
   warn "odin not found; skipping litescale-server (set ODIN=/path/to/odin)"
 fi
