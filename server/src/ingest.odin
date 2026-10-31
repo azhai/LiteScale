@@ -11,6 +11,7 @@ SCHEMA_VERSION :: 1
 MAX_RECORDS_PER_BATCH :: 500
 MAX_MEMBERS :: 64
 MAX_DEVICES :: 64
+MAX_GOALS :: 512
 
 // ---- wire format ---------------------------------------------------------
 
@@ -33,13 +34,28 @@ Member_Payload :: struct {
 	name:       string,
 	avatar:     string,
 	color:      int,
+	height_cm:  f64,
+	gender:     string,
+	birth:      string,
 	updated_at: i64,
 }
 
+// Legacy single goal, still sent by older app builds.
 Goal_Payload :: struct {
 	cleared:    bool,
 	member_id:  string,
 	kg:         f64,
+	updated_at: i64,
+}
+
+// One dated goal per member. `actual_kg` is the weight on that local date as
+// the client sees it (last measurement of the day), so the server stores it
+// verbatim instead of guessing a timezone.
+Member_Goal_Payload :: struct {
+	member_id:  string,
+	date:       string,
+	kg:         f64,
+	actual_kg:  f64,
 	updated_at: i64,
 }
 
@@ -55,7 +71,12 @@ Ingest_Request :: struct {
 	client:         Client_Payload,
 	devices:        []Device_Payload,
 	members:        []Member_Payload,
+	// New clients send every member field, including empty strings that clear
+	// gender/birth. Old builds omit them, so the flag disambiguates.
+	members_snapshot: bool,
 	goal:           Goal_Payload,
+	goals_snapshot: bool,
+	goals:          []Member_Goal_Payload,
 	records:        []Record_Payload,
 }
 
@@ -105,6 +126,51 @@ valid_key :: proc(s: string, max_len: int) -> bool {
 
 valid_weight :: proc(kg: f64) -> bool {
 	return kg > 0 && kg <= 500
+}
+
+valid_height :: proc(cm: f64) -> bool {
+	return cm > 0 && cm <= 300
+}
+
+// Empty means "not set"; the client only sends the two known genders.
+valid_gender :: proc(s: string) -> bool {
+	return s == "" || s == "female" || s == "male"
+}
+
+// Birth month is yyyy-MM, e.g. 1990-05.
+valid_birth_month :: proc(s: string) -> bool {
+	if len(s) != 7 || s[4] != '-' {
+		return false
+	}
+	for i in 0 ..< len(s) {
+		if i == 4 {
+			continue
+		}
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	year := int(s[0] - '0') * 1000 + int(s[1] - '0') * 100 + int(s[2] - '0') * 10 + int(s[3] - '0')
+	month := int(s[5] - '0') * 10 + int(s[6] - '0')
+	return year >= 1900 && year <= 2100 && month >= 1 && month <= 12
+}
+
+// Goal identity is the local calendar date, rendered as yyyy-MM-dd.
+valid_date :: proc(s: string) -> bool {
+	if len(s) != 10 || s[4] != '-' || s[7] != '-' {
+		return false
+	}
+	for i in 0 ..< len(s) {
+		if i == 4 || i == 7 {
+			continue
+		}
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	month := int(s[5] - '0') * 10 + int(s[6] - '0')
+	day := int(s[8] - '0') * 10 + int(s[9] - '0')
+	return month >= 1 && month <= 12 && day >= 1 && day <= 31
 }
 
 // record_uid is content-derived: replaying the same measurement from the same
@@ -197,6 +263,125 @@ upsert_member :: proc(conn: ^db.Conn, client_id: string, m: Member_Payload, at: 
 	return db.step(stmt) == db.SQLITE_DONE
 }
 
+set_member_height :: proc(conn: ^db.Conn, client_id, member_id: string, cm: f64, at: i64) -> bool {
+	stmt := db.prepare(
+		conn,
+		`INSERT INTO member_profiles (client_id, member_id, height_cm, updated_at)
+		 VALUES (?1, ?2, ?3, ?4)
+		 ON CONFLICT(client_id, member_id) DO UPDATE SET
+		   height_cm = excluded.height_cm,
+		   updated_at = excluded.updated_at`,
+	)
+	if stmt == nil {
+		return false
+	}
+	defer db.finalize(stmt)
+	db.bind_text(stmt, 1, client_id)
+	db.bind_text(stmt, 2, member_id)
+	db.bind_double(stmt, 3, cm)
+	db.bind_int64(stmt, 4, at)
+	return db.step(stmt) == db.SQLITE_DONE
+}
+
+// set_member_details stores gender/birth. With `replace`, empty values clear
+// the field (a current client's snapshot); without it, empty means "untouched"
+// so an older build cannot wipe what a newer one has already uploaded.
+set_member_details :: proc(
+	conn: ^db.Conn,
+	client_id, member_id, gender, birth: string,
+	at: i64,
+	replace: bool,
+) -> bool {
+	sql :=
+		replace ? `INSERT INTO member_details (client_id, member_id, gender, birth, updated_at)
+		 VALUES (?1, ?2, ?3, ?4, ?5)
+		 ON CONFLICT(client_id, member_id) DO UPDATE SET
+		   gender = excluded.gender,
+		   birth = excluded.birth,
+		   updated_at = excluded.updated_at` : `INSERT INTO member_details (client_id, member_id, gender, birth, updated_at)
+		 VALUES (?1, ?2, ?3, ?4, ?5)
+		 ON CONFLICT(client_id, member_id) DO UPDATE SET
+		   gender = CASE WHEN excluded.gender != '' THEN excluded.gender ELSE member_details.gender END,
+		   birth = CASE WHEN excluded.birth != '' THEN excluded.birth ELSE member_details.birth END,
+		   updated_at = excluded.updated_at`
+	stmt := db.prepare(conn, sql)
+	if stmt == nil {
+		return false
+	}
+	defer db.finalize(stmt)
+	db.bind_text(stmt, 1, client_id)
+	db.bind_text(stmt, 2, member_id)
+	db.bind_text(stmt, 3, gender)
+	db.bind_text(stmt, 4, birth)
+	db.bind_int64(stmt, 5, at)
+	return db.step(stmt) == db.SQLITE_DONE
+}
+
+// replace_member_goals applies the client's full goal snapshot: the server
+// holds no goals the client no longer has. Legacy single-goal rows are removed
+// in the same step so the admin view cannot show a stale goal.
+replace_member_goals :: proc(
+	conn: ^db.Conn,
+	client_id: string,
+	goals: []Member_Goal_Payload,
+	at: i64,
+) -> bool {
+	for sql in ([]string{"DELETE FROM member_goals WHERE client_id = ?1", "DELETE FROM goals WHERE client_id = ?1"}) {
+		stmt := db.prepare(conn, sql)
+		if stmt == nil {
+			return false
+		}
+		db.bind_text(stmt, 1, client_id)
+		ok := db.step(stmt) == db.SQLITE_DONE
+		db.finalize(stmt)
+		if !ok {
+			return false
+		}
+	}
+
+	ins := db.prepare(
+		conn,
+		`INSERT INTO member_goals (client_id, member_id, date, target_kg, actual_kg, updated_at)
+		 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+		 ON CONFLICT(client_id, member_id, date) DO UPDATE SET
+		   target_kg = excluded.target_kg,
+		   actual_kg = excluded.actual_kg,
+		   updated_at = excluded.updated_at`,
+	)
+	if ins == nil {
+		return false
+	}
+	defer db.finalize(ins)
+
+	for g in goals {
+		if !valid_key(g.member_id, 64) || !valid_date(g.date) || !valid_weight(g.kg) {
+			continue
+		}
+		if !member_exists(conn, client_id, g.member_id) {
+			continue
+		}
+		actual := g.actual_kg
+		if !valid_weight(actual) {
+			actual = 0
+		}
+		updated := g.updated_at
+		if updated <= 0 {
+			updated = at
+		}
+		db.reset(ins)
+		db.bind_text(ins, 1, client_id)
+		db.bind_text(ins, 2, g.member_id)
+		db.bind_text(ins, 3, g.date)
+		db.bind_double(ins, 4, g.kg)
+		db.bind_double(ins, 5, actual)
+		db.bind_int64(ins, 6, updated)
+		if db.step(ins) != db.SQLITE_DONE {
+			return false
+		}
+	}
+	return true
+}
+
 upsert_device :: proc(conn: ^db.Conn, client_id: string, d: Device_Payload) -> bool {
 	stmt := db.prepare(
 		conn,
@@ -254,6 +439,9 @@ validate_ingest :: proc(req: ^Ingest_Request) -> string {
 	if len(req.records) > MAX_RECORDS_PER_BATCH {
 		return "too many records"
 	}
+	if len(req.goals) > MAX_GOALS {
+		return "too many goals"
+	}
 	return ""
 }
 
@@ -310,6 +498,27 @@ apply_ingest :: proc(
 			out.error = db.last_error(conn)
 			return
 		}
+		// A missing or zero height means "not set by this build"; only a real
+		// value overwrites what the server already knows.
+		if valid_height(m.height_cm) {
+			if !set_member_height(conn, cid, m.id, m.height_cm, at) {
+				out.error = db.last_error(conn)
+				return
+			}
+		}
+		gender := valid_gender(m.gender) ? m.gender : ""
+		birth := valid_birth_month(m.birth) ? m.birth : ""
+		if req.members_snapshot {
+			if !set_member_details(conn, cid, m.id, gender, birth, at, true) {
+				out.error = db.last_error(conn)
+				return
+			}
+		} else if gender != "" || birth != "" {
+			if !set_member_details(conn, cid, m.id, gender, birth, at, false) {
+				out.error = db.last_error(conn)
+				return
+			}
+		}
 	}
 
 	for d in req.devices {
@@ -326,7 +535,12 @@ apply_ingest :: proc(
 		}
 	}
 
-	if req.goal.cleared {
+	if req.goals_snapshot {
+		if !replace_member_goals(conn, cid, req.goals, at) {
+			out.error = db.last_error(conn)
+			return
+		}
+	} else if req.goal.cleared {
 		stmt := db.prepare(conn, "DELETE FROM goals WHERE client_id = ?1")
 		if stmt == nil {
 			out.error = db.last_error(conn)

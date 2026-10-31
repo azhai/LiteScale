@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:litescale/model/entities.dart';
 import 'package:litescale/model/weight_record.dart';
 import 'package:litescale/service/app_controller.dart';
 import 'package:litescale/service/uploader.dart';
@@ -68,9 +69,19 @@ void main() {
 
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await app.init();
-    await app.addMember('阿债');
+    final Member created = await app.addMember('阿债');
+    await app.setActiveMember(created.id);
     await app.rememberDevice('C0:FF:EE:12:34:56', 'OKOK S3');
-    await app.setGoalKg(68.5);
+    await app.setHeightCm(172, memberId: app.activeMemberId);
+    await app.setMemberDetails(
+      app.activeMemberId,
+      gender: 'female',
+      birth: '1990-05',
+    );
+    await app.setMemberGoal(
+      const MemberGoal(date: '2026-10-29', targetKg: 68.5),
+      memberId: app.activeMemberId,
+    );
     await app.importRecords(<WeightRecord>[
       WeightRecord(
         time: DateTime(2026, 10, 28, 8, 30),
@@ -102,14 +113,26 @@ void main() {
       'http://127.0.0.1:$port/api/v1/admin/clients/${uploader.clientId}',
     );
     final List<dynamic> members = detail['members'] as List<dynamic>;
-    expect(members.map((dynamic m) => (m as Map<String, dynamic>)['name']),
-        contains('阿债'));
+    final Map<String, dynamic> member = members
+        .cast<Map<String, dynamic>>()
+        .firstWhere((Map<String, dynamic> m) => m['name'] == '阿债');
+    expect((member['height_cm'] as num).toDouble(), closeTo(172, 0.001));
+    expect(member['gender'], 'female');
+    expect(member['birth'], '1990-05');
+    expect(member['goals'], 1);
     final List<dynamic> devices = detail['devices'] as List<dynamic>;
     expect(devices, hasLength(1));
     expect((devices.single as Map<String, dynamic>)['name'], 'OKOK S3');
-    final Map<String, dynamic> goal = detail['goal'] as Map<String, dynamic>;
-    expect(goal['set'], isTrue);
-    expect((goal['kg'] as num).toDouble(), closeTo(68.5, 0.001));
+
+    final List<dynamic> goals = detail['goals'] as List<dynamic>;
+    expect(goals, hasLength(1));
+    final Map<String, dynamic> goal = goals.single as Map<String, dynamic>;
+    expect(goal['member_id'], member['id']);
+    expect(goal['date'], '2026-10-29');
+    expect((goal['target_kg'] as num).toDouble(), closeTo(68.5, 0.001));
+    // Actual weight is the last measurement on that local date.
+    expect((goal['actual_kg'] as num).toDouble(), closeTo(70.8, 0.001));
+    expect((detail['goal'] as Map<String, dynamic>)['set'], isFalse);
 
     // A second sync must not duplicate anything.
     await uploader.syncNow();

@@ -8,7 +8,8 @@
         class="member-chip {{item.active ? 'member-chip-on' : ''}}"
         data-id="{{item.id}}"
         bindtap="onMember">
-        <text>{{item.avatar}} {{item.name}}</text>
+        <image class="member-avatar" src="{{item.avatarSrc}}" mode="aspectFill"></image>
+        <text>{{item.name}}</text>
       </view>
     </scroll-view>
   </view>

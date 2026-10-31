@@ -40,12 +40,10 @@
 .avatar {
   width: 60rpx;
   height: 60rpx;
-  line-height: 60rpx;
-  text-align: center;
   border-radius: 50%;
   margin-right: 20rpx;
-  font-size: 30rpx;
   background: #ede7f6;
+  flex-shrink: 0;
 }
 
 .color-1 { background: #e3f2fd; }
@@ -57,6 +55,90 @@
 .check {
   color: #6a4c93;
   font-weight: 700;
+}
+
+.sub-title {
+  margin-top: 24rpx;
+  margin-bottom: 12rpx;
+  font-size: 26rpx;
+  color: #7a7a85;
+}
+
+.avatar-strip {
+  white-space: nowrap;
+  margin-top: 8rpx;
+}
+
+.avatar-opt {
+  display: inline-block;
+  width: 76rpx;
+  height: 76rpx;
+  padding: 4rpx;
+  box-sizing: border-box;
+  border-radius: 50%;
+  margin-right: 12rpx;
+  background: #f2f2f7;
+  border: 3rpx solid transparent;
+  vertical-align: top;
+}
+
+.avatar-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.avatar-on {
+  border-color: #6a4c93;
+  background: #ede7f6;
+}
+
+.goal {
+  display: flex;
+  align-items: center;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.goal-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.goal-date {
+  font-size: 28rpx;
+  color: #3c3c46;
+}
+
+.goal-del {
+  padding: 0 12rpx;
+  font-size: 28rpx;
+  color: #b0b0b0;
+}
+
+.goal-form {
+  display: flex;
+  align-items: center;
+  margin-top: 20rpx;
+}
+
+.goal-pick {
+  flex: 1;
+  margin-right: 16rpx;
+}
+
+.goal-date-pick {
+  background: #f7f7fb;
+  border-radius: 12rpx;
+  padding: 18rpx 20rpx;
+  font-size: 30rpx;
+  color: #3c3c46;
+}
+
+.goal-target {
+  flex: 1;
 }
 
 .chips {

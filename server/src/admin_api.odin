@@ -73,8 +73,12 @@ Member_Row :: struct {
 	name:         string,
 	avatar:       string,
 	color:        int,
+	height_cm:    f64,
+	gender:       string,
+	birth:        string,
 	updated_at:   i64,
 	measurements: int,
+	goals:        int,
 }
 
 Device_Row :: struct {
@@ -90,6 +94,15 @@ Goal_Row :: struct {
 	updated_at: i64,
 }
 
+Member_Goal_Row :: struct {
+	member_id:   string,
+	member_name: string,
+	date:        string,
+	target_kg:   f64,
+	actual_kg:   f64,
+	updated_at:  i64,
+}
+
 Client_Stats :: struct {
 	measurements: int,
 	first_ts:     i64,
@@ -103,6 +116,7 @@ Client_Detail_Response :: struct {
 	members: [dynamic]Member_Row,
 	devices: [dynamic]Device_Row,
 	goal:    Goal_Row,
+	goals:   [dynamic]Member_Goal_Row,
 	stats:   Client_Stats,
 }
 
@@ -279,7 +293,7 @@ handle_admin_overview :: proc(req: ^web.Request, res: ^web.Response) {
 		   (SELECT COUNT(*) FROM devices),
 		   (SELECT COUNT(*) FROM members),
 		   (SELECT COUNT(*) FROM measurements),
-		   (SELECT COUNT(*) FROM goals),
+		   (SELECT COUNT(*) FROM member_goals),
 		   (SELECT COUNT(*) FROM batches),
 		   COALESCE((SELECT MAX(received_at) FROM batches), 0)`,
 	)
@@ -421,9 +435,14 @@ handle_admin_client_detail :: proc(req: ^web.Request, res: ^web.Response) {
 	out.members = make([dynamic]Member_Row, 0, 8)
 	mstmt := db.prepare(
 		&G.conn,
-		`SELECT id, name, avatar, color, updated_at,
-		   (SELECT COUNT(*) FROM measurements m WHERE m.client_id = ?1 AND m.member_id = members.id)
-		 FROM members WHERE client_id = ?1 ORDER BY updated_at`,
+		`SELECT mm.id, mm.name, mm.avatar, mm.color, COALESCE(p.height_cm, 0),
+		   COALESCE(dt.gender, ''), COALESCE(dt.birth, ''), mm.updated_at,
+		   (SELECT COUNT(*) FROM measurements m WHERE m.client_id = ?1 AND m.member_id = mm.id),
+		   (SELECT COUNT(*) FROM member_goals g WHERE g.client_id = ?1 AND g.member_id = mm.id)
+		 FROM members mm
+		 LEFT JOIN member_profiles p ON p.client_id = mm.client_id AND p.member_id = mm.id
+		 LEFT JOIN member_details dt ON dt.client_id = mm.client_id AND dt.member_id = mm.id
+		 WHERE mm.client_id = ?1 ORDER BY mm.updated_at`,
 	)
 	if mstmt != nil {
 		db.bind_text(mstmt, 1, client_id)
@@ -435,8 +454,12 @@ handle_admin_client_detail :: proc(req: ^web.Request, res: ^web.Response) {
 					name = db.col_text_dup(mstmt, 1, context.temp_allocator),
 					avatar = db.col_text_dup(mstmt, 2, context.temp_allocator),
 					color = db.col_int(mstmt, 3),
-					updated_at = db.col_int64(mstmt, 4),
-					measurements = db.col_int(mstmt, 5),
+					height_cm = db.col_double(mstmt, 4),
+					gender = db.col_text_dup(mstmt, 5, context.temp_allocator),
+					birth = db.col_text_dup(mstmt, 6, context.temp_allocator),
+					updated_at = db.col_int64(mstmt, 7),
+					measurements = db.col_int(mstmt, 8),
+					goals = db.col_int(mstmt, 9),
 				},
 			)
 		}
@@ -477,6 +500,32 @@ handle_admin_client_detail :: proc(req: ^web.Request, res: ^web.Response) {
 		db.finalize(gstmt)
 	}
 
+	out.goals = make([dynamic]Member_Goal_Row, 0, 8)
+	mgstmt := db.prepare(
+		&G.conn,
+		`SELECT g.member_id, COALESCE(mm.name, ''), g.date, g.target_kg, g.actual_kg, g.updated_at
+		 FROM member_goals g
+		 LEFT JOIN members mm ON mm.client_id = g.client_id AND mm.id = g.member_id
+		 WHERE g.client_id = ?1 ORDER BY g.date, g.member_id`,
+	)
+	if mgstmt != nil {
+		db.bind_text(mgstmt, 1, client_id)
+		for db.step(mgstmt) == db.SQLITE_ROW {
+			append(
+				&out.goals,
+				Member_Goal_Row {
+					member_id = db.col_text_dup(mgstmt, 0, context.temp_allocator),
+					member_name = db.col_text_dup(mgstmt, 1, context.temp_allocator),
+					date = db.col_text_dup(mgstmt, 2, context.temp_allocator),
+					target_kg = db.col_double(mgstmt, 3),
+					actual_kg = db.col_double(mgstmt, 4),
+					updated_at = db.col_int64(mgstmt, 5),
+				},
+			)
+		}
+		db.finalize(mgstmt)
+	}
+
 	sstmt := db.prepare(
 		&G.conn,
 		`SELECT COUNT(*), COALESCE(MIN(ts_ms), 0), COALESCE(MAX(ts_ms), 0),
@@ -500,9 +549,12 @@ handle_admin_client_detail :: proc(req: ^web.Request, res: ^web.Response) {
 }
 
 Member_Update :: struct {
-	name:   string,
-	avatar: string,
-	color:  int,
+	name:      string,
+	avatar:    string,
+	color:     int,
+	height_cm: f64,
+	gender:    string,
+	birth:     string,
 }
 
 handle_admin_member_update :: proc(req: ^web.Request, res: ^web.Response) {
@@ -526,7 +578,20 @@ handle_admin_member_update :: proc(req: ^web.Request, res: ^web.Response) {
 		fail(res, .Bad_Request, "invalid name")
 		return
 	}
+	if body.height_cm < 0 || (body.height_cm != 0 && !valid_height(body.height_cm)) {
+		fail(res, .Bad_Request, "height out of range")
+		return
+	}
+	if !valid_gender(body.gender) {
+		fail(res, .Bad_Request, "invalid gender")
+		return
+	}
+	if body.birth != "" && !valid_birth_month(body.birth) {
+		fail(res, .Bad_Request, "invalid birth month")
+		return
+	}
 
+	at := now_ms()
 	sync.lock(&G.mu)
 	defer sync.unlock(&G.mu)
 	stmt := db.prepare(
@@ -543,7 +608,7 @@ handle_admin_member_update :: proc(req: ^web.Request, res: ^web.Response) {
 	db.bind_text(stmt, 3, name)
 	db.bind_text(stmt, 4, body.avatar)
 	db.bind_int(stmt, 5, body.color)
-	db.bind_int64(stmt, 6, now_ms())
+	db.bind_int64(stmt, 6, at)
 	if db.step(stmt) != db.SQLITE_DONE {
 		fail(res, .Internal_Error, "database error")
 		return
@@ -552,10 +617,42 @@ handle_admin_member_update :: proc(req: ^web.Request, res: ^web.Response) {
 		fail(res, .Not_Found, "member not found")
 		return
 	}
+	if body.height_cm > 0 {
+		if !set_member_height(&G.conn, client_id, member_id, body.height_cm, at) {
+			fail(res, .Internal_Error, "database error")
+			return
+		}
+	} else {
+		pstmt := db.prepare(
+			&G.conn,
+			"DELETE FROM member_profiles WHERE client_id = ?1 AND member_id = ?2",
+		)
+		if pstmt == nil {
+			fail(res, .Internal_Error, "database error")
+			return
+		}
+		db.bind_text(pstmt, 1, client_id)
+		db.bind_text(pstmt, 2, member_id)
+		ok := db.step(pstmt) == db.SQLITE_DONE
+		db.finalize(pstmt)
+		if !ok {
+			fail(res, .Internal_Error, "database error")
+			return
+		}
+	}
+	if !set_member_details(&G.conn, client_id, member_id, body.gender, body.birth, at, true) {
+		fail(res, .Internal_Error, "database error")
+		return
+	}
 	web.response_json_status(res, .OK, Action_Response{ok = true, deleted = 1})
 }
 
 Goal_Update :: struct {
+	cleared: bool,
+	kg:      f64,
+}
+
+Member_Goal_Update :: struct {
 	cleared: bool,
 	kg:      f64,
 }
@@ -624,6 +721,91 @@ handle_admin_goal_update :: proc(req: ^web.Request, res: ^web.Response) {
 	web.response_json_status(res, .OK, Action_Response{ok = true})
 }
 
+handle_admin_member_goal_update :: proc(req: ^web.Request, res: ^web.Response) {
+	if !authenticate_admin(req) {
+		fail(res, .Unauthorized, "admin token required")
+		return
+	}
+	client_id, has_c := web.request_param(req, "cid")
+	member_id, has_m := web.request_param(req, "mid")
+	date, has_d := web.request_param(req, "date")
+	if !has_c || !has_m || !has_d {
+		fail(res, .Bad_Request, "missing ids")
+		return
+	}
+	if !valid_date(date) {
+		fail(res, .Bad_Request, "date must be yyyy-MM-dd")
+		return
+	}
+	body: Member_Goal_Update
+	if len(req.body) == 0 || json_unmarshal(req.body, &body) != "" {
+		fail(res, .Bad_Request, "invalid JSON body")
+		return
+	}
+
+	sync.lock(&G.mu)
+	defer sync.unlock(&G.mu)
+
+	if !find_client(&G.conn, client_id) {
+		fail(res, .Not_Found, "client not found")
+		return
+	}
+	if !member_exists(&G.conn, client_id, member_id) {
+		fail(res, .Not_Found, "member not found")
+		return
+	}
+
+	if body.cleared {
+		stmt := db.prepare(
+			&G.conn,
+			"DELETE FROM member_goals WHERE client_id = ?1 AND member_id = ?2 AND date = ?3",
+		)
+		if stmt == nil {
+			fail(res, .Internal_Error, "database error")
+			return
+		}
+		db.bind_text(stmt, 1, client_id)
+		db.bind_text(stmt, 2, member_id)
+		db.bind_text(stmt, 3, date)
+		ok := db.step(stmt) == db.SQLITE_DONE
+		db.finalize(stmt)
+		if !ok {
+			fail(res, .Internal_Error, "database error")
+			return
+		}
+	} else {
+		if !valid_weight(body.kg) {
+			fail(res, .Bad_Request, "weight out of range")
+			return
+		}
+		// actual_kg is owned by the client and survives a target edit.
+		stmt := db.prepare(
+			&G.conn,
+			`INSERT INTO member_goals (client_id, member_id, date, target_kg, actual_kg, updated_at)
+			 VALUES (?1, ?2, ?3, ?4, 0, ?5)
+			 ON CONFLICT(client_id, member_id, date) DO UPDATE SET
+			   target_kg = excluded.target_kg,
+			   updated_at = excluded.updated_at`,
+		)
+		if stmt == nil {
+			fail(res, .Internal_Error, "database error")
+			return
+		}
+		db.bind_text(stmt, 1, client_id)
+		db.bind_text(stmt, 2, member_id)
+		db.bind_text(stmt, 3, date)
+		db.bind_double(stmt, 4, body.kg)
+		db.bind_int64(stmt, 5, now_ms())
+		ok := db.step(stmt) == db.SQLITE_DONE
+		db.finalize(stmt)
+		if !ok {
+			fail(res, .Internal_Error, "database error")
+			return
+		}
+	}
+	web.response_json_status(res, .OK, Action_Response{ok = true})
+}
+
 handle_admin_client_delete :: proc(req: ^web.Request, res: ^web.Response) {
 	if !authenticate_admin(req) {
 		fail(res, .Unauthorized, "admin token required")
@@ -644,7 +826,7 @@ handle_admin_client_delete :: proc(req: ^web.Request, res: ^web.Response) {
 		return
 	}
 	// Child tables key on client_id; clients itself keys on id.
-	tables := []string{"measurements", "batches", "goals", "members", "devices"}
+	tables := []string{"measurements", "batches", "member_goals", "member_details", "member_profiles", "goals", "members", "devices"}
 	deleted := 0
 	ok := true
 	for table in tables {
@@ -852,6 +1034,11 @@ handle_admin_measurements :: proc(req: ^web.Request, res: ^web.Response) {
 	web.response_json_status(res, .OK, out)
 }
 
+// Canonical `ts` rendering: epoch seconds with exactly 3 decimals.
+csv_write_ts :: proc(sb: ^strings.Builder, ts_ms: i64) {
+	fmt.sbprintf(sb, "%d.%03d", ts_ms / 1000, ts_ms % 1000)
+}
+
 csv_write :: proc(sb: ^strings.Builder, s: string) {
 	quoted := strings.contains_any(s, ",\"\n\r")
 	if quoted {
@@ -903,18 +1090,20 @@ handle_admin_measurements_csv :: proc(req: ^web.Request, res: ^web.Response) {
 	strings.builder_init(&sb, context.temp_allocator)
 	// BOM keeps Excel on Windows from mis-detecting UTF-8 Chinese names.
 	strings.write_string(&sb, "\xEF\xBB\xBF")
-	strings.write_string(&sb, "ts_ms,client_id,member_id,member_name,device_id,device_name,kg\n")
+	strings.write_string(&sb, CSV_HEADER)
+	strings.write_byte(&sb, '\n')
 	for db.step(stmt) == db.SQLITE_ROW {
-		fmt.sbprintf(&sb, "%d,", db.col_int64(stmt, 0))
+		csv_write_ts(&sb, db.col_int64(stmt, 0))
+		strings.write_byte(&sb, ',')
 		csv_write(&sb, db.col_text(stmt, 1))
-		strings.write_byte(&sb, ',')
-		csv_write(&sb, db.col_text(stmt, 2))
-		strings.write_byte(&sb, ',')
-		csv_write(&sb, db.col_text(stmt, 3))
 		strings.write_byte(&sb, ',')
 		csv_write(&sb, db.col_text(stmt, 4))
 		strings.write_byte(&sb, ',')
 		csv_write(&sb, db.col_text(stmt, 5))
+		strings.write_byte(&sb, ',')
+		csv_write(&sb, db.col_text(stmt, 2))
+		strings.write_byte(&sb, ',')
+		csv_write(&sb, db.col_text(stmt, 3))
 		fmt.sbprintf(&sb, ",%.3f\n", db.col_double(stmt, 6))
 	}
 
@@ -1139,6 +1328,10 @@ parse_csv_line :: proc(line: string) -> [dynamic]string {
 	return fields
 }
 
+// Canonical measurement CSV schema, shared with the app and the mini program.
+// `ts` is Unix epoch seconds with exactly 3 decimals (millisecond precision).
+CSV_HEADER :: "ts,client_id,device_id,device_name,member_id,member_name,kg"
+
 CSV_Columns :: struct {
 	ts:       int,
 	kg:       int,
@@ -1146,22 +1339,33 @@ CSV_Columns :: struct {
 	member:   int,
 	member_n: int,
 	device:   int,
+	device_n: int,
 	valid:    bool,
 }
 
-csv_header_index :: proc(fields: []string) -> CSV_Columns {
-	cols := CSV_Columns {
-		ts = -1, kg = -1, client = -1, member = -1, member_n = -1, device = -1,
+csv_empty_columns :: proc() -> CSV_Columns {
+	return CSV_Columns {
+		ts = -1, kg = -1, client = -1, member = -1, member_n = -1, device = -1, device_n = -1,
 	}
+}
+
+csv_header_name :: proc(f: string, i: int) -> string {
+	name := strings.to_lower(strings.trim_space(f))
+	if i == 0 {
+		name = strings.trim_prefix(name, "\xEF\xBB\xBF")
+	}
+	return name
+}
+
+// csv_header_index resolves the canonical schema only; this is the import
+// contract. Unknown columns are ignored.
+csv_header_index :: proc(fields: []string) -> CSV_Columns {
+	cols := csv_empty_columns()
 	for f, i in fields {
-		name := strings.to_lower(strings.trim_space(f))
-		if i == 0 {
-			name = strings.trim_prefix(name, "\xEF\xBB\xBF")
-		}
-		switch name {
-		case "ts_ms", "ts", "t", "timestamp_ms", "timestamp", "time":
+		switch csv_header_name(f, i) {
+		case "ts":
 			cols.ts = i
-		case "kg", "weight_kg", "weight":
+		case "kg":
 			cols.kg = i
 		case "client_id":
 			cols.client = i
@@ -1171,6 +1375,25 @@ csv_header_index :: proc(fields: []string) -> CSV_Columns {
 			cols.member_n = i
 		case "device_id":
 			cols.device = i
+		case "device_name":
+			cols.device_n = i
+		}
+	}
+	cols.valid = cols.ts >= 0 && cols.kg >= 0
+	return cols
+}
+
+// csv_compat_header_index recognises headers from older builds and third-party
+// tools. Compatibility is applied only after the canonical lookup has failed,
+// and only fills columns it left unresolved.
+csv_compat_header_index :: proc(base: CSV_Columns, fields: []string) -> CSV_Columns {
+	cols := base
+	for f, i in fields {
+		switch csv_header_name(f, i) {
+		case "ts_ms", "timestamp_ms", "timestamp", "time", "t":
+			if cols.ts < 0 { cols.ts = i }
+		case "weight_kg", "weight":
+			if cols.kg < 0 { cols.kg = i }
 		}
 	}
 	cols.valid = cols.ts >= 0 && cols.kg >= 0
@@ -1182,6 +1405,20 @@ csv_field :: proc(fields: []string, idx: int) -> string {
 		return ""
 	}
 	return strings.trim_space(fields[idx])
+}
+
+// parse_csv_ts reads the canonical `ts` (epoch seconds, 3 decimals). Integer
+// milliseconds from older exports are accepted as a compatibility fallback.
+parse_csv_ts :: proc(value: string) -> (ts_ms: i64, ok: bool) {
+	v, v_ok := strconv.parse_f64(value)
+	// The range check also rejects NaN.
+	if !v_ok || !(v >= 946684800 && v < 1e15) {
+		return 0, false
+	}
+	if v >= 100_000_000_000 {
+		return i64(v + 0.5), true
+	}
+	return i64(v * 1000 + 0.5), true
 }
 
 // lookup_member resolves a member by id, then by name, and creates it only when
@@ -1204,7 +1441,7 @@ lookup_member :: proc(
 		stmt := db.prepare(
 			conn,
 			`INSERT INTO members (client_id, id, name, avatar, color, updated_at)
-			 VALUES (?1, ?2, ?3, '🙂', 0, ?4)`,
+			 VALUES (?1, ?2, ?3, 'a01', 0, ?4)`,
 		)
 		if stmt == nil {
 			return "", false, false
@@ -1246,7 +1483,7 @@ lookup_member :: proc(
 	stmt = db.prepare(
 		conn,
 		`INSERT INTO members (client_id, id, name, avatar, color, updated_at)
-		 VALUES (?1, ?2, ?3, '🙂', 0, ?4) ON CONFLICT(client_id, id) DO NOTHING`,
+		 VALUES (?1, ?2, ?3, 'a01', 0, ?4) ON CONFLICT(client_id, id) DO NOTHING`,
 	)
 	if stmt == nil {
 		return "", false, false
@@ -1284,9 +1521,7 @@ handle_admin_measurements_import :: proc(req: ^web.Request, res: ^web.Response) 
 	lines := strings.split_lines(text, context.temp_allocator)
 
 	out := Import_Response{ok = true, rejected = make([dynamic]Rejected, 0, 8)}
-	cols := CSV_Columns {
-		ts = -1, kg = -1, client = -1, member = -1, member_n = -1, device = -1,
-	}
+	cols := csv_empty_columns()
 	header_seen := false
 
 	sync.lock(&G.mu)
@@ -1315,6 +1550,22 @@ handle_admin_measurements_import :: proc(req: ^web.Request, res: ^web.Response) 
 	}
 	defer db.finalize(ins)
 
+	// Names in the file are display labels; keep an existing name when the row
+	// does not carry one so a name-less export cannot erase client metadata.
+	dev := db.prepare(
+		conn,
+		`INSERT INTO devices (client_id, id, name, last_seen)
+		 VALUES (?1, ?2, ?3, ?4)
+		 ON CONFLICT(client_id, id) DO UPDATE SET
+		   name = CASE WHEN excluded.name <> '' THEN excluded.name ELSE devices.name END,
+		   last_seen = MAX(devices.last_seen, excluded.last_seen)`,
+	)
+	if dev == nil {
+		fail(res, .Internal_Error, "database error")
+		return
+	}
+	defer db.finalize(dev)
+
 	at := now_ms()
 	batch_client := fallback_client
 	batch_id := fmt.tprintf("admin-import-%d-%s", at, random_hex(4))
@@ -1328,10 +1579,14 @@ handle_admin_measurements_import :: proc(req: ^web.Request, res: ^web.Response) 
 		}
 		fields := parse_csv_line(line)
 		if !header_seen {
-			cols = csv_header_index(fields[:])
 			header_seen = true
+			cols = csv_header_index(fields[:])
 			if !cols.valid {
-				fail(res, .Bad_Request, "CSV needs a timestamp (ts_ms/timestamp/t) and a weight (kg/weight_kg) column")
+				// Compatibility: headers from older builds / other tools.
+				cols = csv_compat_header_index(cols, fields[:])
+			}
+			if !cols.valid {
+				fail(res, .Bad_Request, "CSV header must contain ts (epoch seconds, 3 decimals) and kg")
 				return
 			}
 			continue
@@ -1341,11 +1596,7 @@ handle_admin_measurements_import :: proc(req: ^web.Request, res: ^web.Response) 
 		}
 		out.total += 1
 
-		ts, ts_ok := strconv.parse_i64(csv_field(fields[:], cols.ts))
-		// Accept epoch seconds as well as milliseconds (946684800 = 2000-01-01).
-		if ts_ok && ts >= 946684800 && ts < 100_000_000_000 {
-			ts *= 1000
-		}
+		ts, ts_ok := parse_csv_ts(csv_field(fields[:], cols.ts))
 		if !ts_ok || ts < min_ts || ts > future {
 			append(&out.rejected, Rejected{index = lineno + 1, reason = "bad timestamp"})
 			continue
@@ -1377,6 +1628,11 @@ handle_admin_measurements_import :: proc(req: ^web.Request, res: ^web.Response) 
 			append(&out.rejected, Rejected{index = lineno + 1, reason = "invalid device id"})
 			continue
 		}
+		supplied_device_name := csv_field(fields[:], cols.device_n)
+		if len(supplied_device_name) > 128 {
+			append(&out.rejected, Rejected{index = lineno + 1, reason = "invalid device name"})
+			continue
+		}
 
 		member_id, created, member_ok := lookup_member(
 			conn,
@@ -1390,6 +1646,19 @@ handle_admin_measurements_import :: proc(req: ^web.Request, res: ^web.Response) 
 		}
 		if created {
 			out.members_created += 1
+		}
+
+		if supplied_device != "" {
+			db.reset(dev)
+			db.bind_text(dev, 1, client_id)
+			db.bind_text(dev, 2, supplied_device)
+			db.bind_text(dev, 3, supplied_device_name)
+			db.bind_int64(dev, 4, ts)
+			if db.step(dev) != db.SQLITE_DONE {
+				fmt.eprintfln("import row %d device: %s", lineno + 1, db.last_error(conn))
+				fail(res, .Internal_Error, "database error")
+				return
+			}
 		}
 
 		uid := record_uid(client_id, member_id, supplied_device, ts, kg)
@@ -1531,6 +1800,11 @@ register_admin_routes :: proc() {
 
 	web.router_post(&G.router, "/api/v1/admin/clients/:cid/members/:mid", handle_admin_member_update)
 	web.router_put(&G.router, "/api/v1/admin/clients/:cid/goal", handle_admin_goal_update)
+	web.router_put(
+		&G.router,
+		"/api/v1/admin/clients/:cid/members/:mid/goals/:date",
+		handle_admin_member_goal_update,
+	)
 	web.router_delete(&G.router, "/api/v1/admin/clients/:cid", handle_admin_client_delete)
 	web.router_delete(&G.router, "/api/v1/admin/measurements", handle_admin_measurement_delete)
 	web.router_put(&G.router, "/api/v1/admin/measurements/:uid", handle_admin_measurement_update)

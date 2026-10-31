@@ -84,8 +84,10 @@ Page({
     const min = Math.min.apply(null, values);
     const max = Math.max.apply(null, values);
     const avg = values.reduce((a, b) => a + b, 0) / values.length;
-    const bmi = store.bmi(latest, app.globalData.heightCm);
-    const goal = typeof app.globalData.goalKg === 'number' ? app.globalData.goalKg : null;
+    const bodyMember = selMember || store.getActiveMemberId();
+    const bmi = store.bmi(latest, store.memberHeight(bodyMember));
+    const activeGoal = store.goalFor(bodyMember);
+    const goal = activeGoal ? activeGoal.kg : null;
 
     const fmtDelta = (d) =>
       d === null ? '--' : `${d >= 0 ? '+' : '-'}${units.toDisplay(Math.abs(d), unit).toFixed(1)}`;
@@ -229,7 +231,8 @@ Page({
         }
 
         // goal line
-        const goal = typeof app.globalData.goalKg === 'number' ? app.globalData.goalKg : null;
+        const activeGoal = store.goalFor(store.getActiveMemberId());
+        const goal = activeGoal ? activeGoal.kg : null;
         if (goal !== null) {
           const gy = py({ y: units.toDisplay(goal, unit) });
           ctx.save();

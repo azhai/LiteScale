@@ -13,7 +13,19 @@ Page({
     unit: 'jin',
     unitLabel: 'jin',
     height: '',
-    goal: '',
+    bodyDirty: false,
+    gender: '',
+    genderOptions: [],
+    genderIndex: 0,
+    birth: '',
+    birthValue: '1990-01',
+    todayMonth: '',
+    goals: [],
+    goalDate: '',
+    goalTarget: '',
+    avatars: store.AVATARS.map((id) => ({ id, src: store.avatarPath(id) })),
+    activeAvatar: '',
+    activeMemberName: '',
     members: [],
     activeMemberId: '',
     recordCount: 0,
@@ -28,29 +40,66 @@ Page({
     const s = strings(lang);
     const unit = app.globalData.unit;
     const activeMemberId = store.getActiveMemberId();
-    const goal = app.globalData.goalKg;
+    const activeMember = store.memberById(activeMemberId);
+    const height = store.memberHeight(activeMemberId);
+    const goals = store.memberGoals(activeMemberId).map((g) => {
+      const actual = store.goalActual(activeMemberId, g.date);
+      return {
+        date: g.date,
+        targetText: units.format(g.kg, unit, lang),
+        actualText: actual === null ? '—' : units.format(actual, unit, lang),
+        reached: actual !== null && actual <= g.kg,
+      };
+    });
 
     wx.setNavigationBarTitle({ title: s.tabSettings });
 
+    // Avatar/goal edits refresh the page; keep unsaved body fields for the same
+    // member instead of overwriting what the user typed.
+    const keepBody = this.data.bodyDirty && this.data.activeMemberId === activeMemberId;
+    const genderOptions = [
+      { value: '', name: s.genderUnset },
+      { value: 'female', name: s.female },
+      { value: 'male', name: s.male },
+    ];
+    const birth = activeMember.birth || '';
     this.setData({
       s,
       lang,
       unit,
       unitLabel: units.label(unit, lang),
-      height: String(app.globalData.heightCm || ''),
-      goal: typeof goal === 'number' ? units.toDisplay(goal, unit).toFixed(1) : '',
+      height: keepBody ? this.data.height : height === null ? '' : String(height),
+      bodyDirty: keepBody,
+      genderOptions,
+      genderIndex: Math.max(0, genderOptions.findIndex((o) => o.value === (keepBody ? this.data.gender : activeMember.gender || ''))),
+      gender: keepBody ? this.data.gender : activeMember.gender || '',
+      birth: keepBody ? this.data.birth : birth,
+      birthValue: keepBody && this.data.birth ? this.data.birth : birth || '1990-01',
+      todayMonth: store.dayKey(Date.now()).slice(0, 7),
+      goals,
+      goalDate: this.data.goalDate || store.dayKey(Date.now()),
+      avatars: store.AVATARS.map((id) => ({ id, src: store.avatarPath(id) })),
+      activeAvatar: store.normalizeAvatar(activeMember.avatar, activeMember.id),
+      activeMemberName: activeMember.name,
       langs: [
         { key: 'zh', name: s.chinese },
         { key: 'en', name: s.english },
       ],
       activeMemberId,
-      members: store.getMembers().map((m) => ({
-        id: m.id,
-        name: m.name,
-        avatar: m.avatar || '🙂',
-        color: m.color || 0,
-        active: m.id === activeMemberId,
-      })),
+      members: store.getMembers().map((m) => {
+        const tags = [];
+        if (m.id === activeMemberId) tags.push(s.activeMember);
+        if (m.gender === 'female' || m.gender === 'male') tags.push(m.gender === 'female' ? s.female : s.male);
+        if (m.birth) tags.push(m.birth);
+        return {
+          id: m.id,
+          name: m.name,
+          avatarSrc: store.avatarPath(m.avatar, m.id),
+          color: m.color || 0,
+          active: m.id === activeMemberId,
+          note: tags.join(' · '),
+        };
+      }),
       recordCount: store.getRecords().length,
     });
   },
@@ -61,7 +110,7 @@ Page({
     const id = e.currentTarget.dataset.id;
     const s = this.data.s;
     wx.showActionSheet({
-      itemList: [s.setActive, s.renameMember, s.avatar, s.delete],
+      itemList: [s.setActive, s.renameMember, s.delete],
       success: (res) => {
         if (res.tapIndex === 0) {
           store.setActiveMemberId(id);
@@ -69,8 +118,6 @@ Page({
           this.refresh();
         } else if (res.tapIndex === 1) {
           this.renameMember(id);
-        } else if (res.tapIndex === 2) {
-          this.pickAvatar(id);
         } else {
           this.removeMember(id);
         }
@@ -115,16 +162,12 @@ Page({
     });
   },
 
-  pickAvatar(id) {
-    // showActionSheet accepts at most 6 items.
-    const avatars = store.AVATARS.slice(0, 6);
-    wx.showActionSheet({
-      itemList: avatars,
-      success: (res) => {
-        store.setMemberAvatar(id, avatars[res.tapIndex]);
-        this.refresh();
-      },
-    });
+  // The body card shows every avatar: a sheet can only hold 6 items.
+  onPickAvatar(e) {
+    const avatar = e.currentTarget.dataset.avatar;
+    if (!avatar) return;
+    store.setMemberAvatar(store.getActiveMemberId(), avatar);
+    this.refresh();
   },
 
   removeMember(id) {
@@ -213,7 +256,7 @@ Page({
           return;
         }
         const parsed = csv.parse(text);
-        const added = store.importRecords(parsed.records);
+        const added = store.importRecords(parsed.records, parsed.deviceNames);
         wx.showToast({ title: importResult(added, app.globalData.lang), icon: 'none' });
         this.refresh();
       },
@@ -250,42 +293,82 @@ Page({
   },
 
   onHeight(e) {
-    this.setData({ height: e.detail.value });
+    this.setData({ height: e.detail.value, bodyDirty: true });
   },
 
-  onGoal(e) {
-    this.setData({ goal: e.detail.value });
+  onGender(e) {
+    const index = Number(e.detail.value) || 0;
+    this.setData({
+      genderIndex: index,
+      gender: this.data.genderOptions[index].value,
+      bodyDirty: true,
+    });
+  },
+
+  onBirth(e) {
+    const birth = e.detail.value;
+    this.setData({ birth, birthValue: birth, bodyDirty: true });
+  },
+
+  onGoalDate(e) {
+    this.setData({ goalDate: e.detail.value });
+  },
+
+  onGoalTarget(e) {
+    this.setData({ goalTarget: e.detail.value });
+  },
+
+  onAddGoal() {
+    const s = this.data.s;
+    const value = Number(String(this.data.goalTarget || '').trim());
+    if (!value || value <= 0) {
+      wx.showToast({ title: s.invalidNumber, icon: 'none' });
+      return;
+    }
+    store.setMemberGoal(store.getActiveMemberId(), {
+      date: this.data.goalDate || store.dayKey(Date.now()),
+      kg: units.fromDisplay(value, app.globalData.unit),
+    });
+    this.setData({ goalTarget: '' });
+    wx.showToast({ title: s.saved, icon: 'none' });
+    this.refresh();
+  },
+
+  onDeleteGoal(e) {
+    const date = e.currentTarget.dataset.date;
+    if (!date) return;
+    const s = this.data.s;
+    wx.showModal({
+      title: s.delete,
+      content: `${s.goals} · ${date}`,
+      cancelText: s.cancel,
+      confirmText: s.delete,
+      success: (res) => {
+        if (!res.confirm) return;
+        store.removeMemberGoal(store.getActiveMemberId(), date);
+        this.refresh();
+      },
+    });
   },
 
   onSave() {
     const s = this.data.s;
-    const height = Number(this.data.height);
-    if (!height || height <= 0) {
+    const rawHeight = String(this.data.height || '').trim();
+    const height = Number(rawHeight);
+    if (rawHeight && (!height || height <= 0)) {
       wx.showToast({ title: s.invalidNumber, icon: 'none' });
       return;
     }
-
-    let goalKg = null;
-    const raw = String(this.data.goal).trim();
-    if (raw) {
-      const value = Number(raw);
-      if (!value || value <= 0) {
-        wx.showToast({ title: s.invalidNumber, icon: 'none' });
-        return;
-      }
-      goalKg = units.fromDisplay(value, app.globalData.unit);
-    }
-
-    app.globalData.heightCm = height;
-    app.globalData.goalKg = goalKg;
-    // Goal + avatar are local-only, they never reach the CSV.
+    // Body data belongs to the active member; only unit/lang are global.
+    const id = store.getActiveMemberId();
+    if (rawHeight) store.setMemberHeight(id, height);
+    store.setMemberDetails(id, { gender: this.data.gender, birth: this.data.birth });
     store.saveSettings({
-      heightCm: height,
-      goalKg,
       unit: app.globalData.unit,
       lang: app.globalData.lang,
     });
     wx.showToast({ title: s.saved, icon: 'none' });
+    this.setData({ bodyDirty: false });
     this.refresh();
   },
 });

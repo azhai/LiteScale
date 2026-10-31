@@ -19,6 +19,7 @@ This project is a Flutter application designed to connect with an OKOK-compatibl
     * Identifying measurement units (KG, LB, Jin, ST:LB).
     * Determining the number of decimal places for the weight.
 * **Intuitive UI:** Displaying current weight and connection status with a modern and intuitive design.
+* **Per-member body data:** Each member has their own height, gender, birth month and any number of dated goals (target date, target weight, and the actual weight recorded on that date — the day's last reading, updated as new measurements arrive).
 * **Bluetooth State Management:** Checking Bluetooth adapter status and prompting the user to enable it if turned off.
 
 ## Challenges Encountered
@@ -36,7 +37,7 @@ To build and run this project, you will need:
 
 ## How to Build Release Artefacts
 
-Version and build number live in `pubspec.yaml` (`version: 1.0.6+6`). Every script
+Version and build number live in `pubspec.yaml` (`version: 1.0.8+6`). Every script
 sources `scripts/common.sh`, which derives the names from the project itself
 instead of hard-coded strings, so a rename does not require touching the scripts:
 
@@ -51,14 +52,14 @@ also warns when a platform folder still carries an identifier from a previous
 project name.
 
 ```bash
-./scripts/build_android.sh      # dist/LiteScale-1.0.6-android-arm64-v8a.apk
-./scripts/build_ios.sh          # dist/LiteScale-1.0.6-ios-arm64-unsigned.ipa (Mac + Xcode)
-./scripts/build_macos.sh arm64  # dist/LiteScale-1.0.6-macos-arm64.dmg        (Mac only)
-./scripts/build_macos.sh x64    # dist/LiteScale-1.0.6-macos-x64.dmg          (Mac only)
+./scripts/build_android.sh      # dist/LiteScale-1.0.8-android-arm64-v8a.apk
+./scripts/build_ios.sh          # dist/LiteScale-1.0.8-ios-arm64-unsigned.ipa (Mac + Xcode)
+./scripts/build_macos.sh arm64  # dist/LiteScale-1.0.8-macos-arm64.dmg        (Mac only)
+./scripts/build_macos.sh x64    # dist/LiteScale-1.0.8-macos-x64.dmg          (Mac only)
 ./scripts/build_macos.sh universal
-./scripts/build_windows.sh      # dist/LiteScale-1.0.6-windows-x64.zip        (Windows + MSVC only)
-./scripts/build_server.sh       # dist/litescale-server-1.0.6-<os>-<arch>     (Odin, native host)
-./scripts/build_server_linux.sh # dist/litescale-server-1.0.6-linux-x64       (any host with zig)
+./scripts/build_windows.sh      # dist/LiteScale-1.0.8-windows-x64.zip        (Windows + MSVC only)
+./scripts/build_server.sh       # dist/litescale-server-1.0.8-<os>-<arch>     (Odin, native host)
+./scripts/build_server_linux.sh # dist/litescale-server-1.0.8-linux-x64       (any host with zig)
 ./scripts/build_all.sh          # every target possible on this host
 ```
 
@@ -124,6 +125,9 @@ canvas weight chart.
 * Members (`成员`), devices, per-record "change member" and member/device/time
   filters in History — records are stored as `{t, kg, m, d}`, so old single-member
   data is migrated on launch (`utils/store.js` ▸ `migrate`).
+* Body data (height, gender, birth month, dated goals, avatars) is stored per
+  member, matching the Flutter app; the avatar strip in Settings lists the same
+  illustrated set (`assets/avatars/a01..a48.png`).
 * CSV export/import uses the same columns as the Flutter app
   (`utils/csv.js`). Export writes
   `<USER_DATA_PATH>/litescale-YYYY-MM-DD.csv` and opens the system share sheet
@@ -137,8 +141,8 @@ canvas weight chart.
 
 ## Server Upload (optional)
 
-Settings ▸ **Server upload** syncs members, devices, goal and measurements to a
-self-hosted server. The server is written in Odin on top of `opus` + `oboe`, with
+Settings ▸ **Server upload** syncs members (including height, gender and birth
+month), dated goals and measurements to a self-hosted server. The server is written in Odin on top of `opus` + `oboe`, with
 SQLite as the system of record: see [`server/README.md`](server/README.md) for the
 wire format, integrity checks, deduplication, admin console and deployment notes.
 
@@ -175,19 +179,32 @@ To add e.g. an MQTT or HTTP-POST scale, implement `ScaleSource`, add an instance
 Settings ▸ Data. Columns:
 
 ```
-timestamp,device_id,device_name,member_id,member_name,weight_kg
+ts,client_id,device_id,device_name,member_id,member_name,kg
 ```
 
-* `timestamp` is ISO-8601 local time, `weight_kg` is always kilograms.
-* Import is lenient: extra columns are ignored, rows without a valid timestamp or
-  weight are skipped, unknown member names are created automatically.
+* Canonical schema shared with the server: `ts` is Unix epoch seconds with
+  exactly 3 decimals (e.g. `1793000000.123`), `kg` is always kilograms.
+* `client_id` is this install's uploader id (generated on the first sync) so the
+  server can attribute imported rows; it is blank when no upload identity exists
+  (e.g. exports made before enabling upload, or the mini program). The import
+  dialog's default client is only a fallback for rows without one.
+* Import maps columns by header name first (so a server export imports
+  correctly), ignores extra columns, and skips rows without a valid timestamp
+  or weight; unknown member names are created automatically and `device_name`
+  labels are remembered so imported readings keep their scale name.
+* Compatibility comes last: older headers (`ts_ms`, `timestamp`, `time`, `t`,
+  `weight_kg`, `weight`), integer millisecond timestamps, ISO-8601 and files
+  without a header still import.
 * Export is UTF-8 with a BOM so Excel opens it directly.
 * `file_picker` only accepts raw bytes on Android/iOS. On macOS/Windows/Linux the
   plugin returns a path and `lib/service/file_saver.dart` writes the file; if the
   chosen location is not writable (sandbox, read-only volume) the export falls back
   to the temp folder and the snack bar shows that path.
-* Member **avatars** and the **goal weight** are local-only preferences and are
-  deliberately not exported.
+* Member **avatars**, **height**, **gender**, **birth month** and **goals** are
+  local preferences and are deliberately not part of CSV import/export. Avatars
+  are illustrated PNGs bundled under `assets/avatars/` (DiceBear *avataaars*,
+  see `assets/avatars/ATTRIBUTION.md`); legacy emoji avatars are mapped to a
+  stable id on load.
 
 ## Body Composition
 

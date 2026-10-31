@@ -28,6 +28,10 @@ void main() {
     );
     await tester.pump();
 
+    expect(find.text('Gender'), findsOneWidget);
+    expect(find.text('Birth month'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
     await tester.scrollUntilVisible(
       find.text('Enable upload'),
       300,

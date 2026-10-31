@@ -138,7 +138,7 @@ class _ScaleConnectPageState extends State<ScaleConnectPage> {
   /// a 15–35 BMI band. Purely a visual cue, never a medical claim.
   double _ringProgress(double? kg, double? bmi) {
     if (kg == null || kg <= 0) return 0;
-    final double? goal = c.goalKg;
+    final double? goal = c.activeGoal?.targetKg;
     if (goal != null && goal > 0) return (goal / kg).clamp(0.02, 1.0);
     if (bmi == null) return 0.62;
     return ((bmi - 15) / 20).clamp(0.06, 0.98);
@@ -230,7 +230,14 @@ class _ScaleConnectPageState extends State<ScaleConnectPage> {
             label: m.name,
             selected: selected,
             onTap: () => c.setActiveMember(m.id),
-            leading: Text(m.avatar, style: const TextStyle(fontSize: 14)),
+            leading: ClipOval(
+              child: Image.asset(
+                avatarAssetPath(m.avatar, seed: m.id),
+                width: 22,
+                height: 22,
+                fit: BoxFit.cover,
+              ),
+            ),
           );
         },
       ),
@@ -248,7 +255,8 @@ class _ScaleConnectPageState extends State<ScaleConnectPage> {
   ) {
     final ThemeData t = Theme.of(context);
     final ColorScheme cs = t.colorScheme;
-    final bool hasGoal = c.goalKg != null;
+    final double? goalKg = c.activeGoal?.targetKg;
+    final bool hasGoal = goalKg != null;
     final int memberRecords = c.records
         .where((WeightRecord r) => r.memberId == c.activeMemberId)
         .length;
@@ -259,7 +267,7 @@ class _ScaleConnectPageState extends State<ScaleConnectPage> {
     } else if (kg == null) {
       caption = s.measureHint;
     } else if (hasGoal) {
-      final double diff = kg - c.goalKg!;
+      final double diff = kg - goalKg;
       caption = diff <= 0
           ? s.goalReached
           : '${s.goalDistance} ${Units.format(diff, c.unit, isZh: s.isZh)}';
@@ -402,7 +410,7 @@ class _ScaleConnectPageState extends State<ScaleConnectPage> {
   }
 
   String _goalText(S s, double? kg) {
-    final double? goal = c.goalKg;
+    final double? goal = c.activeGoal?.targetKg;
     if (goal == null) return s.noGoalSet;
     if (kg == null) return '--';
     final double diff = kg - goal;

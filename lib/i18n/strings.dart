@@ -151,9 +151,28 @@ class S {
   String get addMember => isZh ? '添加成员' : 'Add member';
   String get renameMember => isZh ? '重命名成员' : 'Rename member';
   String get avatar => isZh ? '头像' : 'Avatar';
-  String get avatarLocalOnly => isZh ? '头像与目标仅保存在本机，不参与导入导出' : 'Avatar and goal stay on this device; they are not exported.';
-  String get goalWeight => isZh ? '目标体重' : 'Goal Weight';
-  String get goalHint => isZh ? '留空表示不设目标' : 'Leave empty for no goal';
+  String get gender => isZh ? '性别' : 'Gender';
+  String get genderUnset => isZh ? '未设置' : 'Not set';
+  String get female => isZh ? '女' : 'Female';
+  String get male => isZh ? '男' : 'Male';
+  String genderLabel(String value) => value == 'female'
+      ? female
+      : value == 'male'
+          ? male
+          : genderUnset;
+  String get birthMonth => isZh ? '出生年月' : 'Birth month';
+  String get notSet => isZh ? '未设置' : 'Not set';
+  String get avatarLocalOnly => isZh
+      ? '头像、身高、性别、出生年月与目标不参与 CSV 导入导出'
+      : 'Avatar, height, gender, birth month and goals are not part of CSV import/export.';
+  String get goals => isZh ? '目标计划' : 'Goals';
+  String get addGoal => isZh ? '添加目标' : 'Add goal';
+  String get goalDate => isZh ? '达成日期' : 'Target date';
+  String get targetWeight => isZh ? '期望体重' : 'Target';
+  String get actualWeight => isZh ? '实际体重' : 'Actual';
+  String get noGoals => isZh
+      ? '还没有目标，点“添加目标”为当前成员设定'
+      : 'No goals yet — add one for the active member.';
   String get goalLine => isZh ? '目标' : 'Goal';
   String get goalDistance => isZh ? '距目标' : 'To Goal';
   String get noGoalSet => isZh ? '未设置' : 'Not set';
@@ -173,8 +192,8 @@ class S {
       isZh ? '已导入 $n 条记录' : 'Imported $n record(s)';
   String get csvFormat => 'CSV · UTF-8';
   String get csvHint => isZh
-      ? '列：timestamp, device_id, device_name, member_id, member_name, weight_kg'
-      : 'Columns: timestamp, device_id, device_name, member_id, member_name, weight_kg';
+      ? '列：ts, client_id, device_id, device_name, member_id, member_name, kg（ts 为三位小数秒级时间戳）'
+      : 'Columns: ts, client_id, device_id, device_name, member_id, member_name, kg (ts = epoch seconds, 3 decimals)';
   String get dataSource => isZh ? '数据源' : 'Data source';
   String get sourceBle => isZh ? 'BLE 广播' : 'BLE advertisement';
   String get memberName => isZh ? '成员名称' : 'Member name';

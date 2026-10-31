@@ -53,7 +53,7 @@ Page({
       const unit = app.globalData.unit;
       const text = format(this._lastKg, unit, app.globalData.lang);
       patch.weightText = text.replace(` ${label(unit, app.globalData.lang)}`, '');
-      const bmi = store.bmi(this._lastKg, app.globalData.heightCm);
+      const bmi = store.bmi(this._lastKg, store.memberHeight(store.getActiveMemberId()));
       patch.bmiText = bmi ? `${s.bmi} ${bmi.toFixed(1)} · ${bmiCategory(bmi, app.globalData.lang)}` : '';
     }
     patch.s = s;
@@ -63,7 +63,7 @@ Page({
       members: store.getMembers().map((m) => ({
         id: m.id,
         name: m.name,
-        avatar: m.avatar || '🙂',
+        avatarSrc: store.avatarPath(m.avatar, m.id),
         active: m.id === activeMemberId,
       })),
       status: this.data.status || s.ready,
@@ -194,7 +194,7 @@ Page({
     const lang = app.globalData.lang;
     const unit = app.globalData.unit;
     const value = format(reading.kg, unit, lang);
-    const bmi = store.bmi(reading.kg, app.globalData.heightCm);
+    const bmi = store.bmi(reading.kg, store.memberHeight(store.getActiveMemberId()));
     this._lastKg = reading.kg;
 
     this.setData({

@@ -5,8 +5,6 @@ App({
   globalData: {
     lang: 'zh',
     unit: 'jin',
-    heightCm: 170,
-    goalKg: null,
     activeMemberId: store.DEFAULT_MEMBER_ID,
   },
 
@@ -20,10 +18,9 @@ App({
 
     this.globalData.lang = settings.lang || (sysLang.indexOf('zh') === 0 ? 'zh' : 'en');
     this.globalData.unit = settings.unit || 'jin';
-    this.globalData.heightCm = settings.heightCm || 170;
-    this.globalData.goalKg = typeof settings.goalKg === 'number' ? settings.goalKg : null;
 
     store.ensureMembers(this.globalData.lang);
+    store.migrateBodySettings();
     this.globalData.activeMemberId = store.getActiveMemberId();
 
     this.applyTabBar();

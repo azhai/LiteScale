@@ -2,10 +2,10 @@
   <view class="card">
     <view class="title">{{s.members}}</view>
     <view class="row" wx:for="{{members}}" wx:key="id" data-id="{{item.id}}" bindtap="onMember">
-      <text class="avatar color-{{item.color}}">{{item.avatar}}</text>
+      <image class="avatar color-{{item.color}}" src="{{item.avatarSrc}}" mode="aspectFill"></image>
       <view class="row-main">
         <text class="row-text">{{item.name}}</text>
-        <text class="muted" wx:if="{{item.active}}">{{s.activeMember}}</text>
+        <text class="muted" wx:if="{{item.note}}">{{item.note}}</text>
       </view>
       <text class="row-more">⋯</text>
     </view>
@@ -13,26 +13,55 @@
   </view>
 
   <view class="card">
-    <view class="title">{{s.data}}</view>
-    <view class="row" bindtap="onExport">
-      <text class="row-text">{{s.exportCsv}}</text>
-      <text class="muted">{{recordCount}} {{s.recordCount}}</text>
-    </view>
-    <view class="row" bindtap="onImport">
-      <text class="row-text">{{s.importCsv}}</text>
-    </view>
-    <view class="row" bindtap="onClear">
-      <text class="row-text danger">{{s.clearAll}}</text>
-    </view>
-    <text class="hint">{{s.avatarLocalOnly}}</text>
-  </view>
+    <view class="title">{{s.currentMember}} · {{activeMemberName}}</view>
+    <scroll-view class="avatar-strip" scroll-x enhanced show-scrollbar="{{false}}">
+      <view
+        wx:for="{{avatars}}"
+        wx:key="id"
+        class="avatar-opt {{activeAvatar === item.id ? 'avatar-on' : ''}}"
+        data-avatar="{{item.id}}"
+        bindtap="onPickAvatar">
+        <image class="avatar-img" src="{{item.src}}" mode="aspectFill"></image>
+      </view>
+    </scroll-view>
 
-  <view class="card">
-    <view class="title">{{s.height}}</view>
+    <view class="sub-title">{{s.height}}</view>
     <input class="input" type="digit" value="{{height}}" bindinput="onHeight" />
-    <view class="title" style="margin-top:24rpx">{{s.goalWeight}} ({{unitLabel}})</view>
-    <input class="input" type="digit" value="{{goal}}" placeholder="{{s.goalHint}}" bindinput="onGoal" />
+
+    <view class="sub-title">{{s.gender}}</view>
+    <picker mode="selector" range="{{genderOptions}}" range-key="name" value="{{genderIndex}}" bindchange="onGender">
+      <view class="input">{{genderOptions[genderIndex].name}}</view>
+    </picker>
+
+    <view class="sub-title">{{s.birthMonth}}</view>
+    <picker mode="date" fields="month" value="{{birthValue}}" start="1900-01" end="{{todayMonth}}" bindchange="onBirth">
+      <view class="input">{{birth || s.notSet}}</view>
+    </picker>
+
+    <view class="sub-title">{{s.goals}}</view>
+    <view class="goal" wx:for="{{goals}}" wx:key="date">
+      <view class="goal-main">
+        <text class="goal-date">{{item.reached ? '✓' : '○'}} {{item.date}}</text>
+        <text class="muted">{{s.targetWeight}} {{item.targetText}} · {{s.actualWeight}} {{item.actualText}}</text>
+      </view>
+      <text class="goal-del" data-date="{{item.date}}" bindtap="onDeleteGoal">✕</text>
+    </view>
+    <text class="hint" wx:if="{{!goals.length}}">{{s.noGoals}}</text>
+
+    <view class="goal-form">
+      <picker class="goal-pick" mode="date" value="{{goalDate}}" bindchange="onGoalDate">
+        <view class="goal-date-pick">{{goalDate}}</view>
+      </picker>
+      <input
+        class="input goal-target"
+        type="digit"
+        value="{{goalTarget}}"
+        placeholder="{{s.targetWeight}} ({{unitLabel}})"
+        bindinput="onGoalTarget" />
+    </view>
+    <button class="btn-plain" bindtap="onAddGoal">+ {{s.addGoal}}</button>
     <button class="btn-save" bindtap="onSave">{{s.save}}</button>
+    <text class="hint">{{s.avatarLocalOnly}}</text>
   </view>
 
   <view class="card">

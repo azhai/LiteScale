@@ -40,12 +40,47 @@ CREATE TABLE IF NOT EXISTS members (
 	PRIMARY KEY (client_id, id)
 );
 
+-- Legacy single goal per client; kept so older app builds keep working.
 CREATE TABLE IF NOT EXISTS goals (
 	client_id   TEXT PRIMARY KEY,
 	member_id   TEXT,
 	kg          REAL NOT NULL,
 	updated_at  INTEGER NOT NULL
 );
+
+-- Per-member height. 0/absent row means "not set".
+CREATE TABLE IF NOT EXISTS member_profiles (
+	client_id  TEXT NOT NULL,
+	member_id  TEXT NOT NULL,
+	height_cm  REAL NOT NULL DEFAULT 0,
+	updated_at INTEGER NOT NULL,
+	PRIMARY KEY (client_id, member_id)
+);
+
+-- Gender and birth month (yyyy-MM). Empty strings mean "not set".
+CREATE TABLE IF NOT EXISTS member_details (
+	client_id  TEXT NOT NULL,
+	member_id  TEXT NOT NULL,
+	gender     TEXT NOT NULL DEFAULT '',
+	birth      TEXT NOT NULL DEFAULT '',
+	updated_at INTEGER NOT NULL,
+	PRIMARY KEY (client_id, member_id)
+);
+
+-- One goal per member per date. actual_kg is the last measurement on that
+-- date as computed by the client; the server never derives it from ts_ms
+-- because the client's local day is what the user sees.
+CREATE TABLE IF NOT EXISTS member_goals (
+	client_id  TEXT NOT NULL,
+	member_id  TEXT NOT NULL,
+	date       TEXT NOT NULL,
+	target_kg  REAL NOT NULL,
+	actual_kg  REAL NOT NULL DEFAULT 0,
+	updated_at INTEGER NOT NULL,
+	PRIMARY KEY (client_id, member_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_member_goals_client ON member_goals (client_id, date);
 
 CREATE TABLE IF NOT EXISTS measurements (
 	uid          TEXT PRIMARY KEY,

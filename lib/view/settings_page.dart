@@ -29,30 +29,36 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _heightCtrl;
-  late final TextEditingController _goalCtrl;
   late final TextEditingController _urlCtrl;
   late final TextEditingController _enrollCtrl;
+  String? _bodyMemberId;
+  String _gender = '';
+  String _birth = '';
 
   @override
   void initState() {
     super.initState();
-    _heightCtrl = TextEditingController(
-      text: widget.controller.heightCm.toStringAsFixed(0),
-    );
-    final double? goal = widget.controller.goalKg;
-    _goalCtrl = TextEditingController(
-      text: goal == null
-          ? ''
-          : Units.toDisplay(goal, widget.controller.unit).toStringAsFixed(1),
-    );
+    _heightCtrl = TextEditingController();
+    _syncBodyFields();
     _urlCtrl = TextEditingController(text: widget.uploader.baseUrl);
     _enrollCtrl = TextEditingController(text: widget.uploader.enrollKey);
+  }
+
+  /// Body inputs follow the active member; switching members reloads them.
+  void _syncBodyFields() {
+    final AppController c = widget.controller;
+    if (_bodyMemberId == c.activeMemberId) return;
+    _bodyMemberId = c.activeMemberId;
+    final Member m = c.activeMember;
+    final double? h = c.heightCmOf(c.activeMemberId);
+    _heightCtrl.text = h == null ? '' : h.toStringAsFixed(0);
+    _gender = m.gender;
+    _birth = m.birth;
   }
 
   @override
   void dispose() {
     _heightCtrl.dispose();
-    _goalCtrl.dispose();
     _urlCtrl.dispose();
     _enrollCtrl.dispose();
     super.dispose();
@@ -69,6 +75,7 @@ class _SettingsPageState extends State<SettingsPage> {
         animation: Listenable.merge(<Listenable>[c, u]),
         builder: (BuildContext context, Widget? _) {
           final S s = c.s;
+          _syncBodyFields();
           return ListView(
             padding: const EdgeInsets.fromLTRB(
               Insets.page,
@@ -150,12 +157,19 @@ class _SettingsPageState extends State<SettingsPage> {
             Container(
               width: 38,
               height: 38,
-              alignment: Alignment.center,
+              padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 color: _avatarColor(m.colorIndex),
                 shape: BoxShape.circle,
               ),
-              child: Text(m.avatar, style: const TextStyle(fontSize: 18)),
+              child: ClipOval(
+                child: Image.asset(
+                  avatarAssetPath(m.avatar, seed: m.id),
+                  width: 34,
+                  height: 34,
+                  fit: BoxFit.cover,
+                ),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -163,15 +177,20 @@ class _SettingsPageState extends State<SettingsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(m.name, style: t.textTheme.titleMedium),
-                  if (active)
+                  if (active || m.gender.isNotEmpty || m.birth.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
-                        s.activeMember,
+                        <String>[
+                          if (active) s.activeMember,
+                          if (m.gender.isNotEmpty) s.genderLabel(m.gender),
+                          if (m.birth.isNotEmpty) m.birth,
+                        ].join(' · '),
                         style: t.textTheme.bodySmall?.copyWith(
                           fontSize: 11,
-                          color: cs.primary,
-                          fontWeight: FontWeight.w600,
+                          color: active ? cs.primary : cs.onSurfaceVariant,
+                          fontWeight:
+                              active ? FontWeight.w600 : FontWeight.normal,
                         ),
                       ),
                     ),
@@ -223,29 +242,166 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _bodyCard(S s) {
     final ThemeData t = Theme.of(context);
     final ColorScheme cs = t.colorScheme;
+    final Member m = c.activeMember;
 
     return AppCard(
-      padding: const EdgeInsets.fromLTRB(Insets.card, 6, Insets.card, 14),
+      padding: const EdgeInsets.fromLTRB(Insets.card, 10, Insets.card, 14),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
+          Row(
+            children: <Widget>[
+              Container(
+                width: 34,
+                height: 34,
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: _avatarColor(m.colorIndex),
+                  shape: BoxShape.circle,
+                ),
+                child: ClipOval(
+                  child: Image.asset(
+                    avatarAssetPath(m.avatar, seed: m.id),
+                    width: 30,
+                    height: 30,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(m.name, style: t.textTheme.titleMedium),
+                  Text(
+                    s.currentMember,
+                    style: t.textTheme.bodySmall?.copyWith(
+                      fontSize: 11,
+                      color: cs.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
           _fieldRow(
             label: s.height,
             controller: _heightCtrl,
             suffix: 'cm',
-            onSubmitted: () => _saveHeight(s),
+            onSubmitted: () => _saveBody(s),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: <Widget>[
+                Expanded(child: Text(s.gender, style: t.textTheme.bodyMedium)),
+                DropdownButton<String>(
+                  value: _gender,
+                  isDense: true,
+                  underline: const SizedBox.shrink(),
+                  style: t.textTheme.titleSmall,
+                  items: <DropdownMenuItem<String>>[
+                    DropdownMenuItem<String>(
+                      value: '',
+                      child: Text(s.genderUnset),
+                    ),
+                    DropdownMenuItem<String>(
+                      value: 'female',
+                      child: Text(s.female),
+                    ),
+                    DropdownMenuItem<String>(
+                      value: 'male',
+                      child: Text(s.male),
+                    ),
+                  ],
+                  onChanged: (String? v) =>
+                      setState(() => _gender = v ?? ''),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(s.birthMonth, style: t.textTheme.bodyMedium),
+                ),
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _pickBirth(s),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          _birth.isEmpty ? s.notSet : _birth,
+                          style: t.textTheme.titleSmall?.copyWith(
+                            color: _birth.isEmpty
+                                ? cs.onSurfaceVariant
+                                : cs.onSurface,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.calendar_month_rounded,
+                          size: 16,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_birth.isNotEmpty)
+                  IconButton(
+                    tooltip: s.delete,
+                    onPressed: () => setState(() => _birth = ''),
+                    icon: Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: Divider(color: cs.outlineVariant.withValues(alpha: 0.5)),
           ),
-          _fieldRow(
-            label: s.goalWeight,
-            controller: _goalCtrl,
-            suffix: Units.label(c.unit, s.isZh),
-            hint: s.goalHint,
-            onSubmitted: () => _saveGoal(s),
+          Row(
+            children: <Widget>[
+              Expanded(child: Text(s.goals, style: t.textTheme.bodyMedium)),
+              TextButton.icon(
+                onPressed: () => _addGoal(s),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text(s.addGoal),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 34),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
+          if (m.goals.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                s.noGoals,
+                style: t.textTheme.bodySmall?.copyWith(
+                  fontSize: 11,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            )
+          else
+            for (final MemberGoal g in m.goals) _goalRow(s, m, g),
+          const SizedBox(height: 8),
           Row(
             children: <Widget>[
               Expanded(
@@ -260,15 +416,56 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(width: 12),
               FilledButton.tonalIcon(
-                onPressed: () {
-                  _saveHeight(s);
-                  _saveGoal(s);
-                },
+                onPressed: () => _saveBody(s),
                 icon: const Icon(Icons.check_rounded, size: 18),
                 label: Text(s.saveChanges),
                 style: FilledButton.styleFrom(minimumSize: const Size(0, 38)),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _goalRow(S s, Member m, MemberGoal g) {
+    final ThemeData t = Theme.of(context);
+    final ColorScheme cs = t.colorScheme;
+    final double? actual = c.goalActualKg(g.date, memberId: m.id);
+    final bool reached = actual != null && actual <= g.targetKg;
+    final String actualText =
+        actual == null ? '—' : Units.format(actual, c.unit, isZh: s.isZh);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: <Widget>[
+          Icon(
+            reached ? Icons.flag_circle_rounded : Icons.flag_outlined,
+            size: 20,
+            color: reached ? cs.primary : cs.onSurfaceVariant,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(g.date, style: t.textTheme.titleSmall),
+                Text(
+                  '${s.targetWeight} ${Units.format(g.targetKg, c.unit, isZh: s.isZh)}'
+                  ' · ${s.actualWeight} $actualText',
+                  style: t.textTheme.bodySmall?.copyWith(
+                    fontSize: 11.5,
+                    color: reached ? cs.primary : cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: s.delete,
+            onPressed: () => _deleteGoal(s, g),
+            icon: Icon(Icons.close_rounded, size: 18, color: cs.onSurfaceVariant),
+            visualDensity: VisualDensity.compact,
           ),
         ],
       ),
@@ -747,7 +944,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _exportCsv(S s) async {
-    final String csv = CsvService.export(c.records, c);
+    final String csv = CsvService.export(c.records, c, clientId: u.clientId);
     final String date = DateTime.now().toIso8601String().substring(0, 10);
     final String fileName = 'litescale-$date.csv';
     // BOM so Excel opens UTF-8 correctly.
@@ -801,7 +998,10 @@ class _SettingsPageState extends State<SettingsPage> {
         return;
       }
       final CsvImportResult parsed = CsvService.parse(content, c);
-      final int added = await c.importRecords(parsed.records);
+      final int added = await c.importRecords(
+        parsed.records,
+        deviceNames: parsed.deviceNames,
+      );
       _snack(s.importResult(added));
     } catch (e) {
       _snack('${s.importFailed}: $e');
@@ -829,30 +1029,129 @@ class _SettingsPageState extends State<SettingsPage> {
     if (ok == true) await c.clearRecords();
   }
 
-  void _saveHeight(S s) {
-    final double? v = double.tryParse(_heightCtrl.text.trim());
-    if (v == null || v <= 0) {
-      _snack(s.invalidNumber);
-      return;
+  void _saveBody(S s) {
+    final String raw = _heightCtrl.text.trim();
+    if (raw.isNotEmpty) {
+      final double? v = double.tryParse(raw);
+      if (v == null || v <= 0) {
+        _snack(s.invalidNumber);
+        return;
+      }
+      c.setHeightCm(v);
     }
-    c.setHeightCm(v);
+    c.setMemberDetails(c.activeMemberId, gender: _gender, birth: _birth);
     _snack(s.saved);
   }
 
-  void _saveGoal(S s) {
-    final String text = _goalCtrl.text.trim();
-    if (text.isEmpty) {
-      c.setGoalKg(null);
-      _snack(s.saved);
-      return;
+  Future<void> _pickBirth(S s) async {
+    final DateTime now = DateTime.now();
+    DateTime initial = DateTime(now.year - 30, now.month);
+    if (_birth.length == 7) {
+      final DateTime? parsed = DateTime.tryParse('$_birth-01');
+      if (parsed != null) initial = parsed;
     }
-    final double? v = double.tryParse(text);
-    if (v == null || v <= 0) {
+    if (initial.isAfter(now)) initial = now;
+    if (initial.isBefore(DateTime(1900))) initial = DateTime(1900);
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1900),
+      lastDate: now,
+      initialDatePickerMode: DatePickerMode.year,
+      helpText: s.birthMonth,
+    );
+    if (picked == null) return;
+    final String value = '${picked.year.toString().padLeft(4, '0')}-'
+        '${picked.month.toString().padLeft(2, '0')}';
+    setState(() => _birth = value);
+  }
+
+  Future<void> _addGoal(S s) async {
+    final bool isZh = s.isZh;
+    DateTime date = DateTime.now().add(const Duration(days: 30));
+    final TextEditingController targetCtrl = TextEditingController();
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter setLocal) => AlertDialog(
+          title: Text(s.addGoal),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(s.goalDate),
+                subtitle: Text(AppController.dayKey(date)),
+                trailing: const Icon(Icons.calendar_today_rounded, size: 18),
+                onTap: () async {
+                  final DateTime? picked = await showDatePicker(
+                    context: context,
+                    initialDate: date,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) setLocal(() => date = picked);
+                },
+              ),
+              TextField(
+                controller: targetCtrl,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: InputDecoration(
+                  labelText: '${s.targetWeight} (${Units.label(c.unit, isZh)})',
+                ),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(s.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(s.save),
+            ),
+          ],
+        ),
+      ),
+    );
+    final String text = targetCtrl.text.trim();
+    targetCtrl.dispose();
+    if (ok != true) return;
+    final double? value = double.tryParse(text);
+    if (value == null || value <= 0) {
       _snack(s.invalidNumber);
       return;
     }
-    c.setGoalKg(Units.fromDisplay(v, c.unit));
+    await c.setMemberGoal(MemberGoal(
+      date: AppController.dayKey(date),
+      targetKg: Units.fromDisplay(value, c.unit),
+    ));
     _snack(s.saved);
+  }
+
+  Future<void> _deleteGoal(S s, MemberGoal g) async {
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: Text(s.delete),
+        content: Text('${s.goals} · ${g.date}'),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(s.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(s.delete),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await c.removeMemberGoal(g.date);
   }
 
   Color _avatarColor(int index) {
@@ -875,27 +1174,41 @@ class _SettingsPageState extends State<SettingsPage> {
         title: Text(s.avatar),
         content: SizedBox(
           width: 300,
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: kAvatarEmojis
-                .map((String e) => InkWell(
-                      onTap: () => Navigator.pop(context, e),
-                      borderRadius: BorderRadius.circular(24),
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: m.avatar == e
-                              ? t.colorScheme.primaryContainer
-                              : t.colorScheme.surfaceContainerHigh,
-                        ),
-                        child: Text(e, style: const TextStyle(fontSize: 20)),
-                      ),
-                    ))
-                .toList(),
+          height: 360,
+          child: GridView.builder(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 6,
+              mainAxisSpacing: 6,
+              crossAxisSpacing: 6,
+            ),
+            itemCount: kAvatarIds.length,
+            itemBuilder: (BuildContext context, int i) {
+              final String id = kAvatarIds[i];
+              final bool selected =
+                  normalizeAvatarId(m.avatar, seed: m.id) == id;
+              return InkWell(
+                onTap: () => Navigator.pop(context, id),
+                customBorder: const CircleBorder(),
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selected
+                        ? t.colorScheme.primaryContainer
+                        : t.colorScheme.surfaceContainerHigh,
+                    border: selected
+                        ? Border.all(color: t.colorScheme.primary, width: 2)
+                        : null,
+                  ),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/avatars/$id.png',
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
         actions: <Widget>[

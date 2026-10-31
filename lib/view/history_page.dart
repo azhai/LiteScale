@@ -304,9 +304,9 @@ class _HistoryPageState extends State<HistoryPage> {
                 ),
                 extraLinesData: ExtraLinesData(
                   horizontalLines: <HorizontalLine>[
-                    if (c.goalKg != null)
+                    if (c.activeGoal != null)
                       HorizontalLine(
-                        y: Units.toDisplay(c.goalKg!, c.unit),
+                        y: Units.toDisplay(c.activeGoal!.targetKg, c.unit),
                         color: cs.secondary,
                         strokeWidth: 1.2,
                         dashArray: <int>[2, 4],
@@ -478,11 +478,12 @@ class _HistoryPageState extends State<HistoryPage> {
       ),
       StatTile(
         label: s.goalDistance,
-        value: c.goalKg == null
+        value: c.activeGoal == null
             ? s.noGoalSet
-            : (latest <= c.goalKg!
+            : (latest <= c.activeGoal!.targetKg
                 ? s.goalReached
-                : Units.format(latest - c.goalKg!, c.unit, isZh: s.isZh)),
+                : Units.format(latest - c.activeGoal!.targetKg, c.unit,
+                    isZh: s.isZh)),
       ),
     ];
 
@@ -606,7 +607,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 ),
                 const SizedBox(height: 1),
                 Text(
-                  '${c.memberOf(r).avatar} ${c.memberOf(r).name} · $device',
+                  '${c.memberOf(r).name} · $device',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: t.textTheme.bodySmall?.copyWith(

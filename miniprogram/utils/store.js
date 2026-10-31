@@ -7,8 +7,31 @@ const KEY_MEMBERS = 'members';
 const KEY_DEVICES = 'devices';
 
 const DEFAULT_MEMBER_ID = 'me';
-// Avatars are local-only decoration, never exported.
-const AVATARS = ['🙂', '😎', '🧑', '👩', '👨', '🐱'];
+// Illustrated avatars bundled under assets/avatars, local-only decoration.
+// Stored by id and never exported.
+const AVATARS = [
+  'a01', 'a02', 'a03', 'a04', 'a05', 'a06', 'a07', 'a08',
+  'a09', 'a10', 'a11', 'a12', 'a13', 'a14', 'a15', 'a16',
+  'a17', 'a18', 'a19', 'a20', 'a21', 'a22', 'a23', 'a24',
+  'a25', 'a26', 'a27', 'a28', 'a29', 'a30', 'a31', 'a32',
+  'a33', 'a34', 'a35', 'a36', 'a37', 'a38', 'a39', 'a40',
+  'a41', 'a42', 'a43', 'a44', 'a45', 'a46', 'a47', 'a48',
+];
+
+// Legacy emoji avatars (and unknown values) keep a stable distinct id.
+function normalizeAvatar(avatar, seed) {
+  if (AVATARS.indexOf(avatar) >= 0) return avatar;
+  const basis = `${seed || ''}|${avatar || ''}`;
+  let hash = 5381;
+  for (let i = 0; i < basis.length; i++) {
+    hash = (hash * 33 + basis.charCodeAt(i)) >>> 0;
+  }
+  return AVATARS[hash % AVATARS.length];
+}
+
+function avatarPath(avatar, seed) {
+  return `/assets/avatars/${normalizeAvatar(avatar, seed)}.png`;
+}
 
 function read(key, fallback) {
   const value = wx.getStorageSync(key);
@@ -55,14 +78,27 @@ function memberName(id) {
   return memberById(id).name;
 }
 
+// Millisecond ids: bump past any id already taken so two members added in the
+// same millisecond cannot collide.
+function newMemberId(list) {
+  let ms = Date.now();
+  let id = 'm' + ms;
+  while (list.some((m) => m.id === id)) id = 'm' + ++ms;
+  return id;
+}
+
 function addMember(name) {
   const list = getMembers();
   const clean = String(name || '').trim() || String(list.length + 1);
   const member = {
-    id: 'm' + Date.now(),
+    id: newMemberId(list),
     name: clean,
     avatar: AVATARS[list.length % AVATARS.length],
     color: list.length % 6,
+    heightCm: null,
+    gender: '',
+    birth: '',
+    goals: [],
   };
   list.push(member);
   saveMembers(list);
@@ -79,6 +115,20 @@ function setMemberAvatar(id, avatar) {
   saveMembers(getMembers().map((m) => (m.id === id ? Object.assign({}, m, { avatar }) : m)));
 }
 
+// Gender is '', 'female' or 'male'; birth is 'yyyy-MM' (empty when unset).
+function setMemberDetails(id, details) {
+  saveMembers(
+    getMembers().map((m) =>
+      m.id === id
+        ? Object.assign({}, m, {
+            gender: details.gender === undefined ? m.gender || '' : details.gender,
+            birth: details.birth === undefined ? m.birth || '' : details.birth,
+          })
+        : m
+    )
+  );
+}
+
 // Records of a removed member move to the first remaining member.
 function removeMember(id) {
   const list = getMembers();
@@ -91,6 +141,94 @@ function removeMember(id) {
   saveMembers(remaining);
   if (getActiveMemberId() === id) setActiveMemberId(fallback);
   return true;
+}
+
+// --- per-member body data --------------------------------------------------
+
+function dayKey(ms) {
+  const d = new Date(ms);
+  const pad = (n) => (n < 10 ? '0' + n : String(n));
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+function memberHeight(id) {
+  const h = memberById(id).heightCm;
+  return typeof h === 'number' && h > 0 ? h : null;
+}
+
+function setMemberHeight(id, heightCm) {
+  saveMembers(getMembers().map((m) =>
+    m.id === id ? Object.assign({}, m, { heightCm }) : m
+  ));
+}
+
+function memberGoals(id) {
+  const goals = memberById(id).goals;
+  if (!Array.isArray(goals)) return [];
+  return goals.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+
+// One goal per date: adding the same date replaces the target.
+function setMemberGoal(id, goal) {
+  saveMembers(getMembers().map((m) => {
+    if (m.id !== id) return m;
+    const goals = memberGoals(id).filter((g) => g.date !== goal.date);
+    goals.push({ date: goal.date, kg: goal.kg });
+    goals.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    return Object.assign({}, m, { goals });
+  }));
+}
+
+function removeMemberGoal(id, date) {
+  saveMembers(getMembers().map((m) => {
+    if (m.id !== id) return m;
+    const goals = memberGoals(id).filter((g) => g.date !== date);
+    return Object.assign({}, m, { goals });
+  }));
+}
+
+// Next goal by date, or the most recent past one.
+function goalFor(id) {
+  const goals = memberGoals(id);
+  if (!goals.length) return null;
+  const today = dayKey(Date.now());
+  for (const g of goals) {
+    if (String(g.date) >= today) return g;
+  }
+  return goals[goals.length - 1];
+}
+
+// Last reading on a day (local time) is that day's actual weight.
+function goalActual(id, date) {
+  let last = null;
+  for (const r of getRecords()) {
+    if ((r.m || DEFAULT_MEMBER_ID) !== id) continue;
+    if (dayKey(r.t) !== date) continue;
+    if (!last || r.t > last.t) last = r;
+  }
+  return last ? last.kg : null;
+}
+
+// Height and goal used to be global settings; attach them to the active member.
+function migrateBodySettings() {
+  const settings = getSettings();
+  const height = typeof settings.heightCm === 'number' ? settings.heightCm : null;
+  const goal = typeof settings.goalKg === 'number' ? settings.goalKg : null;
+  if (height === null && goal === null) return;
+  const active = getActiveMemberId();
+  saveMembers(getMembers().map((m) => {
+    if (m.id !== active) return m;
+    const next = Object.assign({}, m);
+    if (next.heightCm === undefined && height !== null) next.heightCm = height;
+    if ((!Array.isArray(next.goals) || !next.goals.length) && goal !== null) {
+      next.goals = [{ date: dayKey(Date.now()), kg: goal }];
+    }
+    return next;
+  }));
+  const rest = Object.assign({}, settings);
+  delete rest.heightCm;
+  delete rest.goalKg;
+  wx.setStorageSync(KEY_SETTINGS, rest);
 }
 
 // --- devices ---------------------------------------------------------------
@@ -183,7 +321,11 @@ function findRecord(t) {
 
 // Merges imported rows; members named `pending:<name>` are created first and
 // duplicates (same timestamp + weight) are skipped. Returns rows added.
-function importRecords(rows) {
+function importRecords(rows, deviceNames) {
+  Object.keys(deviceNames || {}).forEach((id) => {
+    rememberDevice(id, deviceNames[id]);
+  });
+
   const pending = {};
   const byName = {};
   getMembers().forEach((m) => {
@@ -290,11 +432,21 @@ function migrate() {
     if (changed) saveRecords(list);
   }
   ensureMembers(getSettings().lang || 'zh');
+  let avatarChanged = false;
+  const members = getMembers().map((m) => {
+    const avatar = normalizeAvatar(m.avatar, m.id);
+    if (avatar === m.avatar) return m;
+    avatarChanged = true;
+    return Object.assign({}, m, { avatar });
+  });
+  if (avatarChanged) saveMembers(members);
 }
 
 module.exports = {
   DEFAULT_MEMBER_ID,
   AVATARS,
+  normalizeAvatar,
+  avatarPath,
   migrate,
   getMembers,
   saveMembers,
@@ -302,8 +454,18 @@ module.exports = {
   memberById,
   memberName,
   addMember,
+  dayKey,
+  memberHeight,
+  setMemberHeight,
+  memberGoals,
+  setMemberGoal,
+  removeMemberGoal,
+  goalFor,
+  goalActual,
+  migrateBodySettings,
   renameMember,
   setMemberAvatar,
+  setMemberDetails,
   removeMember,
   getDevices,
   rememberDevice,

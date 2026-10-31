@@ -12,7 +12,7 @@ import '../model/weight_record.dart';
 import 'app_controller.dart';
 
 /// Keep in sync with the `version:` field in pubspec.yaml.
-const String kClientAppVersion = '1.0.6';
+const String kClientAppVersion = '1.0.8';
 const int kSchemaVersion = 1;
 const int kMaxRecordsPerBatch = 300;
 
@@ -319,13 +319,32 @@ class Uploader extends ChangeNotifier {
             'name': m.name,
             'avatar': m.avatar,
             'color': m.colorIndex,
+            'height_cm': m.heightCm ?? 0,
+            'gender': m.gender,
+            'birth': m.birth,
             'updated_at': 0,
           },
       ],
+      // New clients send empty strings to clear gender/birth; old builds omit
+      // the fields entirely, so the flag tells the server which one it is.
+      'members_snapshot': true,
+      'goals_snapshot': true,
+      'goals': <Map<String, dynamic>>[
+        for (final Member m in app.members)
+          for (final MemberGoal g in m.goals)
+            <String, dynamic>{
+              'member_id': m.id,
+              'date': g.date,
+              'kg': g.targetKg,
+              'actual_kg': app.goalActualKg(g.date, memberId: m.id) ?? 0,
+              'updated_at': 0,
+            },
+      ],
+      // Legacy single goal: old servers still read this field.
       'goal': <String, dynamic>{
-        'cleared': app.goalKg == null,
+        'cleared': app.activeGoal == null,
         'member_id': app.activeMemberId,
-        'kg': app.goalKg ?? 0,
+        'kg': app.activeGoal?.targetKg ?? 0,
         'updated_at': 0,
       },
       'records': <Map<String, dynamic>>[
@@ -347,14 +366,31 @@ class Uploader extends ChangeNotifier {
     return jsonEncode(<String, dynamic>{
       'members': <Map<String, dynamic>>[
         for (final Member m in app.members)
-          <String, dynamic>{'id': m.id, 'name': m.name, 'avatar': m.avatar, 'color': m.colorIndex},
+          <String, dynamic>{
+            'id': m.id,
+            'name': m.name,
+            'avatar': m.avatar,
+            'color': m.colorIndex,
+            'height': m.heightCm,
+            'gender': m.gender,
+            'birth': m.birth,
+            'goals': <Map<String, dynamic>>[
+              for (final MemberGoal g in m.goals)
+                <String, dynamic>{
+                  'date': g.date,
+                  'kg': g.targetKg,
+                  'actual': app.goalActualKg(g.date, memberId: m.id),
+                },
+            ],
+          },
       ],
       'devices': <Map<String, dynamic>>[
         for (final ScaleDevice d in app.devices) <String, dynamic>{'id': d.id, 'name': d.name},
       ],
       'goal': <String, dynamic>{
         'member': app.activeMemberId,
-        'kg': app.goalKg,
+        'date': app.activeGoal?.date,
+        'kg': app.activeGoal?.targetKg,
       },
     });
   }

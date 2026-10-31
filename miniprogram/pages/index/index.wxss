@@ -37,13 +37,22 @@
 }
 
 .member-chip {
-  display: inline-block;
-  padding: 10rpx 24rpx;
+  display: inline-flex;
+  align-items: center;
+  padding: 6rpx 22rpx 6rpx 8rpx;
   margin-right: 12rpx;
   border-radius: 32rpx;
   background: #f1f1f6;
   color: #444;
   font-size: 26rpx;
+}
+
+.member-avatar {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  margin-right: 10rpx;
+  background: #ffffff;
 }
 
 .member-chip-on {

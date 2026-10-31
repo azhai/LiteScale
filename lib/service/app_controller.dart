@@ -12,9 +12,9 @@ import 'units.dart';
 class AppController extends ChangeNotifier {
   static const String _kLang = 'lang';
   static const String _kUnit = 'unit';
-  static const String _kHeight = 'heightCm';
+  static const String _kLegacyHeight = 'heightCm';
   static const String _kDark = 'darkMode';
-  static const String _kGoal = 'goalKg';
+  static const String _kLegacyGoal = 'goalKg';
   static const String _kRecords = 'records';
   static const String _kMembers = 'members';
   static const String _kActiveMember = 'activeMember';
@@ -22,8 +22,6 @@ class AppController extends ChangeNotifier {
 
   AppLang _lang = AppLang.en;
   String _unit = 'jin';
-  double _heightCm = 170;
-  double? _goalKg;
   bool _darkMode = false;
 
   List<Member> _members = <Member>[];
@@ -35,8 +33,6 @@ class AppController extends ChangeNotifier {
 
   AppLang get lang => _lang;
   String get unit => _unit;
-  double get heightCm => _heightCm;
-  double? get goalKg => _goalKg;
   bool get darkMode => _darkMode;
   S get s => S(_lang);
 
@@ -83,8 +79,6 @@ class AppController extends ChangeNotifier {
 
     _unit = _prefs!.getString(_kUnit) ?? 'jin';
     if (!Units.all.contains(_unit)) _unit = 'jin';
-    _heightCm = _prefs!.getDouble(_kHeight) ?? 170;
-    _goalKg = _prefs!.getDouble(_kGoal);
     _darkMode = _prefs!.getBool(_kDark) ?? false;
 
     final String membersRaw = _prefs!.getString(_kMembers) ?? '';
@@ -98,12 +92,32 @@ class AppController extends ChangeNotifier {
     if (!_members.any((Member m) => m.id == _activeMemberId)) {
       _activeMemberId = _members.first.id;
     }
+    await _migrateLegacyBodySettings();
 
     final String devicesRaw = _prefs!.getString(_kDevices) ?? '';
     _devices = _decodeDevices(devicesRaw);
 
     _records = WeightRecord.decodeList(_prefs!.getString(_kRecords) ?? '');
     notifyListeners();
+  }
+
+  /// Height and goal used to be global; they belong to a member now.
+  Future<void> _migrateLegacyBodySettings() async {
+    final double? height = _prefs!.getDouble(_kLegacyHeight);
+    final double? goal = _prefs!.getDouble(_kLegacyGoal);
+    if (height == null && goal == null) return;
+    _members = _members.map((Member m) {
+      if (m.id != _activeMemberId) return m;
+      return m.copyWith(
+        heightCm: m.heightCm ?? height,
+        goals: m.goals.isNotEmpty || goal == null
+            ? m.goals
+            : <MemberGoal>[MemberGoal(date: dayKey(DateTime.now()), targetKg: goal)],
+      );
+    }).toList();
+    await _persistMembers();
+    await _prefs!.remove(_kLegacyHeight);
+    await _prefs!.remove(_kLegacyGoal);
   }
 
   List<Member> _decodeMembers(String raw) {
@@ -144,20 +158,60 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setHeightCm(double value) async {
-    _heightCm = value;
-    await _prefs?.setDouble(_kHeight, value);
+  /// Height belongs to a member; [memberId] defaults to the active member.
+  Future<void> setHeightCm(double value, {String? memberId}) async {
+    final String id = memberId ?? _activeMemberId;
+    _members = _members
+        .map((Member m) => m.id == id ? m.copyWith(heightCm: value) : m)
+        .toList();
+    await _persistMembers();
     notifyListeners();
   }
 
-  /// Goal weight is local-only, never exported.
-  Future<void> setGoalKg(double? value) async {
-    _goalKg = value;
-    if (value == null) {
-      await _prefs?.remove(_kGoal);
-    } else {
-      await _prefs?.setDouble(_kGoal, value);
-    }
+  /// Gender and birth month (yyyy-MM); empty strings clear them.
+  Future<void> setMemberDetails(
+    String id, {
+    String? gender,
+    String? birth,
+  }) async {
+    _members = _members
+        .map((Member m) =>
+            m.id == id ? m.copyWith(gender: gender, birth: birth) : m)
+        .toList();
+    await _persistMembers();
+    notifyListeners();
+  }
+
+  /// Adds or replaces the goal for [memberGoal.date] (one goal per day).
+  Future<void> setMemberGoal(
+    MemberGoal memberGoal, {
+    String? memberId,
+  }) async {
+    final String id = memberId ?? _activeMemberId;
+    _members = _members.map((Member m) {
+      if (m.id != id) return m;
+      final List<MemberGoal> goals = <MemberGoal>[
+        for (final MemberGoal g in m.goals)
+          if (g.date != memberGoal.date) g,
+        memberGoal,
+      ]..sort((MemberGoal a, MemberGoal b) => a.date.compareTo(b.date));
+      return m.copyWith(goals: goals);
+    }).toList();
+    await _persistMembers();
+    notifyListeners();
+  }
+
+  Future<void> removeMemberGoal(String date, {String? memberId}) async {
+    final String id = memberId ?? _activeMemberId;
+    _members = _members
+        .map((Member m) => m.id == id
+            ? m.copyWith(
+                goals: m.goals
+                    .where((MemberGoal g) => g.date != date)
+                    .toList())
+            : m)
+        .toList();
+    await _persistMembers();
     notifyListeners();
   }
 
@@ -175,11 +229,22 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Ids are millisecond-based, so bump past any id already taken; two members
+  /// added within the same millisecond must not collide.
+  String _newMemberId() {
+    int ms = DateTime.now().millisecondsSinceEpoch;
+    String id = 'm$ms';
+    while (_members.any((Member m) => m.id == id)) {
+      id = 'm${++ms}';
+    }
+    return id;
+  }
+
   Future<Member> addMember(String name) async {
     final Member member = Member(
-      id: 'm${DateTime.now().millisecondsSinceEpoch}',
+      id: _newMemberId(),
       name: name.trim().isEmpty ? '${_members.length + 1}' : name.trim(),
-      avatar: kAvatarEmojis[_members.length % kAvatarEmojis.length],
+      avatar: kAvatarIds[_members.length % kAvatarIds.length],
       colorIndex: _members.length % 6,
     );
     _members = <Member>[..._members, member];
@@ -315,7 +380,14 @@ class AppController extends ChangeNotifier {
   /// Merges imported records. Members referenced as `pending:<name>` are
   /// created first, duplicates (same time and weight) are skipped.
   /// Returns the number of records actually added.
-  Future<int> importRecords(List<WeightRecord> incoming) async {
+  Future<int> importRecords(
+    List<WeightRecord> incoming, {
+    Map<String, String> deviceNames = const <String, String>{},
+  }) async {
+    for (final MapEntry<String, String> e in deviceNames.entries) {
+      await rememberDevice(e.key, e.value);
+    }
+
     final Map<String, String> pendingToId = <String, String>{};
     for (final WeightRecord r in incoming) {
       if (!r.memberId.startsWith('pending:')) continue;
@@ -383,11 +455,49 @@ class AppController extends ChangeNotifier {
     }).toList();
   }
 
-  double? bmiOf(double kg) {
-    if (_heightCm <= 0) return null;
-    final double m = _heightCm / 100;
+  /// Height of a member (active member by default).
+  double? heightCmOf([String? memberId]) {
+    final double? h = _memberById(memberId ?? _activeMemberId).heightCm;
+    return h != null && h > 0 ? h : null;
+  }
+
+  /// The next goal by date (or the most recent past one when all are past).
+  MemberGoal? goalFor([String? memberId]) {
+    final List<MemberGoal> goals = _memberById(memberId ?? _activeMemberId).goals;
+    if (goals.isEmpty) return null;
+    final String today = dayKey(DateTime.now());
+    for (final MemberGoal g in goals) {
+      if (g.date.compareTo(today) >= 0) return g;
+    }
+    return goals.last;
+  }
+
+  MemberGoal? get activeGoal => goalFor(_activeMemberId);
+
+  /// Last reading on [date] (yyyy-MM-dd, local time), i.e. that day's actual
+  /// weight for the goal.
+  double? goalActualKg(String date, {String? memberId}) {
+    final String id = memberId ?? _activeMemberId;
+    WeightRecord? last;
+    for (final WeightRecord r in _records) {
+      if (r.memberId != id || dayKey(r.time) != date) continue;
+      if (last == null || r.time.isAfter(last.time)) last = r;
+    }
+    return last?.kg;
+  }
+
+  double? bmiOf(double kg, {String? memberId}) {
+    final double? h = heightCmOf(memberId);
+    if (h == null) return null;
+    final double m = h / 100;
     return kg / (m * m);
   }
+
+  /// yyyy-MM-dd in local time.
+  static String dayKey(DateTime time) =>
+      '${time.year.toString().padLeft(4, '0')}-'
+      '${time.month.toString().padLeft(2, '0')}-'
+      '${time.day.toString().padLeft(2, '0')}';
 }
 
 List<dynamic> jsonDecodeList(String raw) => _json.decode(raw) as List<dynamic>;

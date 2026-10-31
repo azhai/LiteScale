@@ -286,7 +286,7 @@ table.table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5p
           <div class="k">上传批次</div><div class="v num" x-text="fmtInt(ov.batches)"></div>
         </div>
         <div class="stat">
-          <div class="k">目标设置</div><div class="v num" x-text="fmtInt(ov.goals)"></div>
+          <div class="k">目标</div><div class="v num" x-text="fmtInt(ov.goals)"></div>
         </div>
         <div class="stat">
           <div class="k">数据库</div><div class="v num" x-text="fmtBytes(ov.db_bytes)"></div>
@@ -363,7 +363,7 @@ table.table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5p
               <thead><tr>
                 <th>客户端</th><th>平台</th><th>版本</th>
                 <th class="right">测量</th><th class="right">成员</th><th class="right">设备</th>
-                <th class="right">最近体重</th><th>最近活跃</th>
+                <th class="right">最近体重</th><th>最近活跃</th><th class="right">操作</th>
               </tr></thead>
               <tbody>
                 <template x-for="c in clients.items" :key="c.id">
@@ -382,6 +382,7 @@ table.table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5p
                       <span x-show="!c.last_kg" class="muted">—</span>
                     </td>
                     <td class="muted num" x-text="c.last_seen_at?ago(c.last_seen_at):'—'"></td>
+                    <td class="right"><div class="row-actions"><button class="btn ghost sm" @click.stop="openClient(c.id)">详情</button></div></td>
                   </tr>
                 </template>
               </tbody>
@@ -558,13 +559,38 @@ table.table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5p
     </div>
 
     <div class="section" x-show="showDetail">
-      <h4>目标</h4>
-      <div class="row">
-        <input class="input num" type="number" step="0.1" min="1" max="500" x-model="goalInput" placeholder="kg">
-        <button class="btn sm" @click="saveGoal()">保存</button>
-        <button class="btn ghost sm" @click="clearGoal()" :disabled="!detail.goal.set">清除</button>
-        <span class="hint" x-show="detail.goal.set" x-text="'当前 '+fmtKg(detail.goal.kg)+' kg · '+fmtJin(detail.goal.kg)+' 斤'"></span>
-        <span class="hint" x-show="!detail.goal.set">未设置目标</span>
+      <h4>目标 <span class="muted" style="font-weight:600;text-transform:none" x-text="'('+detail.goals.length+')'"></span></h4>
+      <template x-for="g in detail.goals" :key="g.member_id+'-'+g.date">
+        <div class="member-row">
+          <div class="member-name">
+            <b x-text="(g.member_name||'成员')+' · '+g.date"></b>
+            <small>
+              期望 <span class="num" x-text="fmtKg(g.target_kg)+' kg'"></span>
+              · 实际 <span class="num" x-text="g.actual_kg?fmtKg(g.actual_kg)+' kg':'—'"></span>
+              · <span class="num" x-text="fmtJin(g.target_kg)+' 斤'"></span>
+            </small>
+          </div>
+          <button class="btn ghost sm" @click="editGoal(g)">修改</button>
+          <button class="btn danger sm" @click="removeGoal(g)">删除</button>
+        </div>
+      </template>
+      <div class="empty" x-show="!detail.goals.length" x-cloak>还没有目标</div>
+
+      <div class="inline-form">
+        <select class="input" style="width:110px" x-model="goalDraft.member_id">
+          <option value="">成员</option>
+          <template x-for="m in detail.members" :key="m.id">
+            <option :value="m.id" x-text="m.name"></option>
+          </template>
+        </select>
+        <input class="input date" type="date" x-model="goalDraft.date">
+        <input class="input num" type="number" step="0.1" min="1" max="500" x-model="goalDraft.kg" placeholder="kg">
+        <button class="btn sm" @click="saveGoal()" :disabled="!goalDraft.member_id||!goalDraft.date">保存</button>
+      </div>
+      <p class="hint" style="margin-top:6px">每个成员每天一个目标；实际体重由客户端当天最后一条测量同步。</p>
+      <div class="row" x-show="detail.goal.set" style="margin-top:8px">
+        <span class="hint">旧版单目标：<b x-text="fmtKg(detail.goal.kg)+' kg'"></b></span>
+        <button class="btn ghost sm" @click="clearLegacyGoal()">清除</button>
       </div>
     </div>
 
@@ -578,7 +604,14 @@ table.table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5p
           </div>
           <div class="member-name">
             <b x-text="m.name"></b>
-            <small><span class="mono" x-text="m.id"></span> · <span class="num" x-text="m.measurements"></span> 条 · <span x-text="fmtTime(m.updated_at)"></span></small>
+            <small>
+              <span x-text="m.height_cm?'身高 '+fmtHeight(m.height_cm)+' cm':'身高 —'"></span>
+              · <span x-text="'性别 ' + (m.gender==='female'?'女':m.gender==='male'?'男':'—')"></span>
+              · <span x-text="'出生 ' + (m.birth || '—')"></span>
+              · <span class="num" x-text="m.measurements"></span> 条
+              · <span class="num" x-text="m.goals"></span> 个目标
+              · <span x-text="fmtTime(m.updated_at)"></span>
+            </small>
           </div>
           <button class="btn ghost sm" @click="editMember(m)" x-show="!memberDraft">编辑</button>
         </div>
@@ -588,8 +621,15 @@ table.table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5p
       <template x-if="memberDraft">
         <form class="inline-form" @submit.prevent="saveMember()">
           <input class="input" style="width:120px" x-model="memberDraft.name" placeholder="昵称" maxlength="128">
-          <input class="input" style="width:64px" x-model="memberDraft.avatar" placeholder="表情" maxlength="8">
+          <input class="input" style="width:76px" x-model="memberDraft.avatar" placeholder="头像标识" maxlength="8">
           <input class="input num" type="number" min="0" max="16777215" x-model="memberDraft.color" placeholder="颜色">
+          <input class="input num" type="number" min="0" max="300" step="0.1" x-model="memberDraft.height_cm" placeholder="身高 cm">
+          <select class="input" style="width:112px" x-model="memberDraft.gender">
+            <option value="">性别未设置</option>
+            <option value="female">女</option>
+            <option value="male">男</option>
+          </select>
+          <input class="input" type="month" min="1900-01" max="2100-12" style="width:150px" x-model="memberDraft.birth">
           <button class="btn sm" type="submit" :disabled="!memberDraft.name.trim()">保存</button>
           <button class="btn ghost sm" type="button" @click="memberDraft=null">取消</button>
         </form>
@@ -671,7 +711,7 @@ table.table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5p
       <button class="btn ghost icon" @click="showImport=false" aria-label="关闭">✕</button>
     </div>
     <div class="modal-body">
-      <label class="field"><span>默认客户端（CSV 缺少客户端列时使用）</span>
+      <label class="field"><span>默认客户端（可选；CSV 的 client_id 为空时使用）</span>
         <select class="input" x-model="importClient">
           <option value="">不使用默认客户端</option>
           <template x-for="c in clientOptions" :key="c.id">
@@ -682,7 +722,7 @@ table.table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5p
       <label class="field"><span>CSV 文件</span>
         <input class="input" type="file" accept=".csv,text/csv" @change="pickImportFile($event)">
       </label>
-      <div class="hint-line">表头需包含时间（ts_ms / timestamp / t）与体重（kg / weight_kg）列，可选 client_id、member_id 或 member_name、device_id；时间支持毫秒或秒级时间戳。客户端未知的行会被拒绝，不会自动创建客户端；重复记录自动跳过。</div>
+      <div class="hint-line">表头：ts, client_id, device_id, device_name, member_id, member_name, kg。ts 为秒级时间戳、固定三位小数（如 1793332000.500），kg 为千克；client_id 可省略。兼容旧表头 ts_ms / timestamp / weight_kg 与毫秒时间戳。客户端未知的行会被拒绝，不会自动创建客户端；重复记录自动跳过。</div>
       <div x-show="importResult" x-cloak>
         <div class="import-summary">
           <span class="pill">总行 <b class="num" x-text="importResult?importResult.total:0"></b></span>
@@ -755,8 +795,8 @@ window.adminApp = function () {
     batchClient: '',
 
     showDetail: false,
-    detail: { client: {}, members: [], devices: [], goal: { set: false, member_id: '', kg: 0, updated_at: 0 }, stats: {} },
-    goalInput: '',
+    detail: { client: {}, members: [], devices: [], goal: { set: false, member_id: '', kg: 0, updated_at: 0 }, goals: [], stats: {} },
+    goalDraft: { member_id: '', date: '', kg: '' },
     memberDraft: null,
 
     // ---------- lifecycle ----------
@@ -863,7 +903,7 @@ window.adminApp = function () {
         const d = await this.api('/api/v1/admin/clients/' + encodeURIComponent(id));
         this.detail = d;
         this.showDetail = true;
-        this.goalInput = d.goal && d.goal.set ? Number(d.goal.kg.toFixed(2)) : '';
+        this.goalDraft = { member_id: (d.members && d.members[0] ? d.members[0].id : ''), date: this.todayInput(), kg: '' };
         this.memberDraft = null;
       });
     },
@@ -1070,15 +1110,28 @@ window.adminApp = function () {
 
     // ---------- client detail actions ----------
     editMember(m) {
-      this.memberDraft = { id: m.id, name: m.name, avatar: m.avatar || '', color: Number(m.color) || 0 };
+      this.memberDraft = {
+        id: m.id,
+        name: m.name,
+        avatar: m.avatar || '',
+        color: Number(m.color) || 0,
+        height_cm: Number(m.height_cm) || 0,
+        gender: m.gender || '',
+        birth: m.birth || '',
+      };
     },
     async saveMember() {
       if (!this.memberDraft || !this.detail) return;
       const id = this.detail.client.id;
+      const height = Number(this.memberDraft.height_cm) || 0;
+      if (height < 0 || height > 300) { this.flash('身高需在 0–300 cm 之间', true); return; }
       const body = {
         name: this.memberDraft.name.trim(),
         avatar: this.memberDraft.avatar || '',
         color: Number(this.memberDraft.color) || 0,
+        height_cm: height,
+        gender: this.memberDraft.gender || '',
+        birth: this.memberDraft.birth || '',
       };
       if (!body.name) return;
       await this.guarded(async () => {
@@ -1090,27 +1143,55 @@ window.adminApp = function () {
         await this.openClient(id);
       });
     },
+    todayInput() {
+      const d = new Date();
+      const p = (n) => String(n).padStart(2, '0');
+      return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+    },
+    goalPath(memberId, date) {
+      return '/api/v1/admin/clients/' + encodeURIComponent(this.detail.client.id) +
+        '/members/' + encodeURIComponent(memberId) + '/goals/' + encodeURIComponent(date);
+    },
+    editGoal(g) {
+      this.goalDraft = { member_id: g.member_id, date: g.date, kg: Number(g.target_kg.toFixed(2)) };
+    },
     async saveGoal() {
       if (!this.detail) return;
-      const kg = Number(this.goalInput);
+      const d = this.goalDraft;
+      if (!d.member_id) { this.flash('请选择成员', true); return; }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date)) { this.flash('请选择达成日期', true); return; }
+      const kg = Number(d.kg);
       if (!isFinite(kg) || kg <= 0 || kg > 500) { this.flash('体重需在 0–500 kg 之间', true); return; }
       const id = this.detail.client.id;
       await this.guarded(async () => {
-        await this.api('/api/v1/admin/clients/' + encodeURIComponent(id) + '/goal', {
+        await this.api(this.goalPath(d.member_id, d.date), {
           method: 'PUT', body: JSON.stringify({ cleared: false, kg: kg }),
         });
-        this.flash('目标已更新');
+        this.flash('目标已保存');
         await this.openClient(id);
       });
     },
-    async clearGoal() {
+    async removeGoal(g) {
+      if (!this.detail) return;
+      const id = this.detail.client.id;
+      const name = g.member_name || '该成员';
+      if (!confirm('删除 ' + name + ' 在 ' + g.date + ' 的目标？')) return;
+      await this.guarded(async () => {
+        await this.api(this.goalPath(g.member_id, g.date), {
+          method: 'PUT', body: JSON.stringify({ cleared: true, kg: 0 }),
+        });
+        this.flash('目标已删除');
+        await this.openClient(id);
+      });
+    },
+    async clearLegacyGoal() {
       if (!this.detail) return;
       const id = this.detail.client.id;
       await this.guarded(async () => {
         await this.api('/api/v1/admin/clients/' + encodeURIComponent(id) + '/goal', {
           method: 'PUT', body: JSON.stringify({ cleared: true, kg: 0 }),
         });
-        this.flash('目标已清除');
+        this.flash('旧版目标已清除');
         await this.openClient(id);
       });
     },
@@ -1132,6 +1213,10 @@ window.adminApp = function () {
     fmtInt(n) { return (n == null ? 0 : Number(n)).toLocaleString('zh-CN'); },
     fmtKg(v) { return (Number(v) || 0).toFixed(2); },
     fmtJin(v) { return ((Number(v) || 0) * 2).toFixed(1); },
+    fmtHeight(v) {
+      const n = Number(v) || 0;
+      return Number.isInteger(n) ? String(n) : n.toFixed(1);
+    },
     fmtBytes(n) {
       n = Number(n) || 0;
       if (n < 1024) return n + ' B';
