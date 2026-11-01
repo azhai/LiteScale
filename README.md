@@ -1,45 +1,84 @@
 # LiteScale
 
-[![Flutter](https://img.shields.io/badge/Made%20with-Flutter-blue.svg)](https://flutter.dev/)
-[![Dart](https://img.shields.io/badge/Language-Dart-0175C2.svg)](https://dart.dev/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+<p>
+  <a href="https://flutter.dev"><img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white"></a>
+  <img alt="Dart" src="https://img.shields.io/badge/Dart-3.x-0175C2?logo=dart&logoColor=white">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.1.1-0E7C6B">
+  <img alt="Platforms" src="https://img.shields.io/badge/platforms-Android%20%C2%B7%20macOS%20%C2%B7%20iOS%20%C2%B7%20Windows%20%C2%B7%20Linux-4C6EF5">
+</p>
 
-## Project Overview
+**English** · [简体中文](README.zh-CN.md)
 
-This project is a Flutter application designed to connect with an OKOK-compatible smart scale (or one based on Chipsea chipsets) via Bluetooth Low Energy (BLE). The application provides a user-friendly interface to discover the scale, connect to it, and receive real-time weight data, parsing and displaying it clearly. This project aims to offer an alternative to relying solely on official scale applications, allowing users and developers to integrate weight data into their custom systems.
+A weight tracker for **OKOK / Chipsea BLE scales** — no vendor app, no account, no cloud
+unless you want one. It reads the scale's advertisement packets directly, keeps everything
+local, and can sync to a self-hosted server written in Odin.
 
-## Key Features
+| Measure | History | Devices | Settings |
+|:--:|:--:|:--:|:--:|
+| <img src="docs/screenshots/ui-measure.png" width="180"> | <img src="docs/screenshots/ui-history.png" width="180"> | <img src="docs/screenshots/ui-devices.png" width="180"> | <img src="docs/screenshots/ui-settings.png" width="180"> |
 
-* **Device Discovery:** Efficient scanning for Bluetooth devices to identify compatible smart scales.
-* **Connection & Pairing:** Establishing a stable and reliable BLE connection with the scale.
-* **Data Reception:** Receiving raw weight data from the scale as soon as a measurement is taken.
-* **Protocol Parsing:** Decrypting the raw data received from the scale using the custom OKOK Protocol (version `0xCA`), including:
-    * Checksum (XOR) validation for data integrity.
-    * Extracting raw weight values.
-    * Identifying measurement units (KG, LB, Jin, ST:LB).
-    * Determining the number of decimal places for the weight.
-* **Intuitive UI:** Displaying current weight and connection status with a modern and intuitive design.
-* **Per-member body data:** Each member has their own height, gender, birth month and any number of dated goals (target date, target weight, and the actual weight recorded on that date — the day's last reading, updated as new measurements arrive).
-* **Bluetooth State Management:** Checking Bluetooth adapter status and prompting the user to enable it if turned off.
+<sub>Screenshots are rendered from the real widget tree by `scripts/screenshots.sh`
+(2×, iPhone 13 metrics), so they cannot drift from the UI without a test run noticing.</sub>
 
-## Challenges Encountered
+## What it does
 
-* **Custom Communication Protocol:** A significant challenge was understanding and reverse-engineering the OKOK BLE Protocol, for which comprehensive public documentation is scarce. The project relied on partial documentation and analyzing device behavior.
-* **Connection Establishment:** The scale's BLE interface might require a specific sequence or "handshake" to establish a successful connection, which could lead to errors like `ANDROID_SPECIFIC_ERROR` or `Timed out`. This necessitates precise experimentation and inspection using tools like nRF Connect.
+* **Advertisement-only reading.** No GATT handshake, no pairing: the scale broadcasts the
+  weight in its BLE advertisement and the app decodes it — so a reading lands while the
+  scale is still showing the number.
+* **Household members.** Each member has their own avatar, height, gender, birth month and
+  any number of dated goals (target date + target weight).
+* **History with four filters.** Time range (7 d / 30 d / 90 d / all), member, device, plus
+  per-record reassignment and a 7-day moving average on the chart.
+* **Transport-agnostic.** A `ScaleSource` registry keeps the UI independent of BLE, so new
+  sources can be added without touching pages.
+* **CSV in and out.** Same column schema as the server, so exports round-trip cleanly.
+* **Optional self-hosted sync.** Opt-in in Settings, exactly-once via content hashes.
+* **A WeChat mini program** with the same protocol, data model and CSV format.
 
-## Prerequisites
+## Repository layout
 
-To build and run this project, you will need:
+```
+lib/                     Flutter app
+  model/                 Member, WeightRecord, goals, avatars
+  source/                ScaleSource interface + BLE advertisement decoder
+  service/               AppController (state), uploader, CSV, units, file saver
+  view/                  theme.dart, four pages, shared widgets
+  i18n/strings.dart      hand-rolled zh/en strings (no flutter_localizations)
+server/                  Odin sync server (opus + oboe HTTP, SQLite)
+miniprogram/             WeChat mini program (vanilla JS, canvas chart)
+scripts/                 build, packaging, icon and screenshot tooling
+test/                    widget, CSV, avatar and upload tests
+docs/screenshots/        images used by this README
+```
 
-* [Flutter SDK](https://flutter.dev/docs/get-started/install) (version 3.x.x or later recommended)
-* An Android device (Android 6.0 Marshmallow or newer) or iOS device (iOS 11.0 or newer) with BLE support.
-* An OKOK / Chipsea compatible smart scale (e.g., "Chipsea-BLE").
+## Getting started
 
-## How to Build Release Artefacts
+Requirements: Flutter 3.x, a device with BLE (Android 6+, iOS 11+, or a desktop), and an
+OKOK / Chipsea-compatible scale.
 
-Version and build number live in `pubspec.yaml` (`version: 1.0.8+6`). Every script
-sources `scripts/common.sh`, which derives the names from the project itself
-instead of hard-coded strings, so a rename does not require touching the scripts:
+```bash
+git clone https://git.home504.io/ryan/LiteScale.git
+cd LiteScale
+flutter pub get
+flutter run
+```
+
+The app scans on the Measure tab; step on the scale while it scans and the reading appears.
+Every scale that produced a reading is remembered on the Devices tab.
+
+**Android permissions** (already declared in `android/app/src/main/AndroidManifest.xml`):
+
+```xml
+<uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+```
+
+## Build and release
+
+`version:` in `pubspec.yaml` is the single source of truth (`1.1.1+10` today). Every script
+sources `scripts/common.sh`, which derives names from the project instead of hard-coded
+strings:
 
 | value | source |
 |---|---|
@@ -47,240 +86,154 @@ instead of hard-coded strings, so a rename does not require touching the scripts
 | display / artefact name (`LiteScale`) | `PRODUCT_NAME` in `macos/Runner/Configs/AppInfo.xcconfig` (override with `APP_NAME=...`) |
 | version / build number | `version:` in `pubspec.yaml` |
 
-Artefacts are written to `dist/` as `LiteScale-<version>-<target>`. `common.sh`
-also warns when a platform folder still carries an identifier from a previous
-project name.
+Artefacts land in `dist/` as `LiteScale-<version>-<target>`:
 
 ```bash
-./scripts/build_android.sh      # dist/LiteScale-1.0.8-android-arm64-v8a.apk
-./scripts/build_ios.sh          # dist/LiteScale-1.0.8-ios-arm64-unsigned.ipa (Mac + Xcode)
-./scripts/build_macos.sh arm64  # dist/LiteScale-1.0.8-macos-arm64.dmg        (Mac only)
-./scripts/build_macos.sh x64    # dist/LiteScale-1.0.8-macos-x64.dmg          (Mac only)
-./scripts/build_macos.sh universal
-./scripts/build_windows.sh      # dist/LiteScale-1.0.8-windows-x64.zip        (Windows + MSVC only)
-./scripts/build_server.sh       # dist/litescale-server-1.0.8-<os>-<arch>     (Odin, native host)
-./scripts/build_server_linux.sh # dist/litescale-server-1.0.8-linux-x64       (any host with zig)
+./scripts/build_android.sh      # dist/LiteScale-1.1.1-android-arm64-v8a.apk
+./scripts/build_ios.sh          # dist/LiteScale-1.1.1-ios-arm64-unsigned.ipa  (macOS + Xcode)
+./scripts/build_macos.sh arm64  # dist/LiteScale-1.1.1-macos-arm64.dmg        (macOS only)
+./scripts/build_macos.sh x64    # dist/LiteScale-1.1.1-macos-x64.dmg          (macOS only)
+./scripts/build_windows.sh      # dist/LiteScale-1.1.1-windows-x64.zip        (Windows + MSVC only)
+./scripts/build_server.sh       # dist/litescale-server-1.1.1-<os>-<arch>     (Odin, native host)
+./scripts/build_server_linux.sh # dist/litescale-server-1.1.1-linux-x64       (any host with zig)
 ./scripts/build_all.sh          # every target possible on this host
 ```
 
-Notes:
+Notes worth knowing before you ship:
 
-* **App identity** — `top.xi-yun.litescale` on macOS and iOS, `top.xi_yun.litescale`
-  on Android (Java package names reject `-`, so the underscore form is the
-  equivalent), and `top.xi-yun.litescale` for the Linux application id. Because
-  these are the OS-level identities, changing them makes every platform treat the
-  app as brand new: old installs are not upgraded in place and local data
-  (records, settings) starts empty.
-* **Android** is built with `--split-per-abi --target-platform android-arm64`, so the
-  APK contains only the `arm64-v8a` native library. Flutter rewrites `versionCode`
-  per split (`abiCode * 1000 + buildNumber`), so the arm64 APK reports `2004` for
-  build number `4` — that is expected.
-* **macOS** architecture is selected per build: the script writes
-  `macos/Runner/Configs/Arch.xcconfig` (included optionally by `Release.xcconfig`),
-  because the Flutter CLI cannot pass `ARCHS` to xcodebuild. Release builds are
-  ad-hoc signed and not notarised, so Gatekeeper will ask users to
-  right-click → Open. Use a Developer ID + `notarytool` for public distribution.
-* **iOS** — two modes:
-  ```bash
-  ./scripts/build_ios.sh unsigned     # no signing, needs re-signing before install
-  IOS_TEAM_ID=XXXXXXXXXX ./scripts/build_ios.sh ipa
-  ```
-  The `ipa` mode writes `ios/ExportOptions.plist` from `IOS_TEAM_ID` and runs
-  `flutter build ipa` (set `EXPORT_METHOD=ad-hoc|app-store` for other flows).
-  Both modes need Xcode's iOS platform component installed
-  (Xcode ▸ Settings ▸ Components, or `xcodebuild -downloadPlatform iOS`).
-* **Linux server** is cross-compiled from macOS (or any host with Odin + zig).
-  Odin emits a `linux_amd64` object, then zig links it against musl plus
-  statically built sqlite3 (3.46.0 amalgamation) and zlib (1.3.2), because the
-  server calls `system:sqlite3` and zlib's `uncompress`. The result is one static
-  ELF with no dependencies on the target host — no `libsqlite3-dev`, no glibc
-  version coupling. Sources are pinned by checksum and cached under
-  `build/linux-cross/`; `LINUX_TARGET` / `LINUX_ARCH` switch it to arm64:
-  ```bash
-  LINUX_TARGET=aarch64-linux-musl LINUX_ARCH=arm64 ./scripts/build_server_linux.sh
-  ```
-* **Windows** cannot be cross-compiled: run `build_windows.sh` on a Windows machine
-  with Visual Studio (Desktop development with C++). The zip contains
-  `LiteScale.exe` plus the Flutter runtime DLLs and `data/`.
-* Release APKs are signed with the debug key
-  (`android/app/build.gradle.kts` → `signingConfigs.getByName("debug")`); configure
-  your own keystore before publishing.
+* **App identity** — `top.xi-yun.litescale` on macOS/iOS/Linux, `top.xi_yun.litescale` on
+  Android (Java package names reject `-`). These are OS-level identities: changing them
+  makes every platform treat the app as brand new, with empty local data.
+* **Android** is built with `--split-per-abi --target-platform android-arm64`, so the APK
+  carries only `arm64-v8a`. Flutter rewrites `versionCode` per split
+  (`abiCode * 1000 + buildNumber`), so build `9` reports `2009` — expected.
+* **macOS** writes `macos/Runner/Configs/Arch.xcconfig` per build, because the Flutter CLI
+  cannot pass `ARCHS` to xcodebuild. Builds are ad-hoc signed and not notarised: Gatekeeper
+  needs right-click → Open. For public distribution use a Developer ID plus `notarytool`.
+* **iOS** — `./scripts/build_ios.sh unsigned`, or
+  `IOS_TEAM_ID=XXXXXXXXXX ./scripts/build_ios.sh ipa` (set
+  `EXPORT_METHOD=ad-hoc|app-store`). Both need the iOS platform component
+  (`xcodebuild -downloadPlatform iOS`).
+* **Windows** cannot be cross-compiled — run `build_windows.sh` on Windows with Visual
+  Studio (Desktop development with C++).
+* **Linux server** is cross-compiled anywhere: Odin emits a `linux_amd64` object, zig links
+  it against musl with statically built sqlite3 + zlib, giving one dependency-free static
+  ELF. `LINUX_TARGET=aarch64-linux-musl LINUX_ARCH=arm64` switches architecture.
+* Release APKs are signed with the debug key (`android/app/build.gradle.kts` →
+  `signingConfigs.getByName("debug")`). Configure a real keystore before publishing.
 
-## App Icon
+## Server sync (optional)
 
-`app-icon.png` (128×128) is the source. `app-icon-1024.png` is upscaled from it for
-icon generation; all platform icons are produced by `flutter_launcher_icons`:
-
-```bash
-flutter pub run flutter_launcher_icons
-```
-
-## WeChat Mini Program
-
-`miniprogram/` is a standalone WeChat Mini Program with the same advertisement-only
-scale protocol (no GATT connection), the same data model as the Flutter app and a
-canvas weight chart.
-
-* Four tabs, mirroring the Flutter app: Measure / History / Devices / Settings.
-* Members (`成员`), devices, per-record "change member" and member/device/time
-  filters in History — records are stored as `{t, kg, m, d}`, so old single-member
-  data is migrated on launch (`utils/store.js` ▸ `migrate`).
-* Body data (height, gender, birth month, dated goals, avatars) is stored per
-  member, matching the Flutter app; the avatar strip in Settings lists the same
-  illustrated set (`assets/avatars/a01..a48.png`).
-* CSV export/import uses the same columns as the Flutter app
-  (`utils/csv.js`). Export writes
-  `<USER_DATA_PATH>/litescale-YYYY-MM-DD.csv` and opens the system share sheet
-  (`wx.shareFileMessage`); where that is unavailable (DevTools) the table is copied
-  to the clipboard instead. Import uses `wx.chooseMessageFile`.
-* Import the folder with WeChat DevTools (set your own `appid` in
-  `miniprogram/project.config.json` — the placeholder is `touristappid`).
-* Bluetooth scanning only works on a real device, not in the DevTools simulator.
-* Protocol changes must be applied twice: `miniprogram/utils/protocol.js`
-  (`parseAdvertisement`) and `lib/source/ble_adv_source.dart`.
-
-## Server Upload (optional)
-
-Settings ▸ **Server upload** syncs members (including height, gender and birth
-month), dated goals and measurements to a self-hosted server. The server is written in Odin on top of `opus` + `oboe`, with
-SQLite as the system of record: see [`server/README.md`](server/README.md) for the
-wire format, integrity checks, deduplication, admin console and deployment notes.
+Settings ▸ Server upload pushes members (height, gender, birth month), dated goals and
+measurements to a self-hosted server. The server is Odin on top of `opus` + `oboe`, with
+SQLite as the system of record — see [`server/README.md`](server/README.md) (Chinese) for
+wire format, integrity checks, admin console and deployment.
 
 ```bash
 make -C server build && make -C server run   # http://127.0.0.1:9429/admin/
 ```
 
-* Upload is opt-in and off by default; nothing leaves the device until enabled.
-* The server address defaults to `https://sc.xi-yun.top/` (HTTPS on port 443);
-  change it in Settings to use your own deployment.
-* Every batch carries `X-Body-Sha256` and a body-derived `X-Idempotency-Key`, so
-  retries are exactly-once; measurements also get a content-derived server-side UID.
-* Upload is append-only: clearing history locally does not delete server data.
-  Removing a client (and all its data) is done from the admin console.
+* Upload is **opt-in and off by default**; nothing leaves the device until enabled.
+* Default endpoint is `https://sc.xi-yun.top/`; change it in Settings.
+* Every batch carries `X-Body-Sha256` and a body-derived `X-Idempotency-Key`, so retries are
+  exactly-once; measurements also get a content-derived server-side UID.
+* Upload is append-only: clearing history locally does not delete server data. Remove a
+  client and its data from the admin console.
 
-## Data Sources
+## WeChat mini program
 
-Scale reading is isolated behind `ScaleSource` (`lib/source/scale_source.dart`), so
-new transports can be added without touching the UI:
+`miniprogram/` is a standalone WeChat Mini Program: same advertisement-only protocol, same
+data model, canvas chart, same CSV columns.
 
-```
-lib/source/
-  scale_source.dart      ScaleSource interface + ScaleSample / SourceDevice
-  ble_adv_source.dart    BLE advertisement implementation (Chipsea/OKOK protocol)
-  source_registry.dart   buildSources() — register new sources here
-```
+* Four tabs mirroring the app: Measure / History / Devices / Settings.
+* Records are stored as `{t, kg, m, d}`; single-member data from older versions is migrated
+  on launch (`utils/store.js` ▸ `migrate`).
+* CSV export writes `<USER_DATA_PATH>/litescale-YYYY-MM-DD.csv` and opens the share sheet
+  (`wx.shareFileMessage`); DevTools falls back to the clipboard. Import uses
+  `wx.chooseMessageFile`.
+* Set your own `appid` in `miniprogram/project.config.json` (placeholder is
+  `touristappid`), then import the folder in WeChat DevTools.
+* BLE scanning only works on a real device, not in the simulator.
+* Protocol changes must be applied twice: `miniprogram/utils/protocol.js`
+  (`parseAdvertisement`) **and** `lib/source/ble_adv_source.dart`.
 
-To add e.g. an MQTT or HTTP-POST scale, implement `ScaleSource`, add an instance to
-`buildSources()`, and the Measure page will show a source selector automatically
-(it renders one chip per registered source).
+## Data model and CSV
 
-## CSV Import / Export
-
-Settings ▸ Data. Columns:
-
-```
+```csv
 ts,client_id,device_id,device_name,member_id,member_name,kg
+1793000000.123,c-macos-1a2b3c4d,C0:FF:EE:12:34:56,OKOK S3,m-1,我,68.4
 ```
 
-* Canonical schema shared with the server: `ts` is Unix epoch seconds with
-  exactly 3 decimals (e.g. `1793000000.123`), `kg` is always kilograms.
-* `client_id` is this install's uploader id (generated on the first sync) so the
-  server can attribute imported rows; it is blank when no upload identity exists
-  (e.g. exports made before enabling upload, or the mini program). The import
-  dialog's default client is only a fallback for rows without one.
-* Import maps columns by header name first (so a server export imports
-  correctly), ignores extra columns, and skips rows without a valid timestamp
-  or weight; unknown member names are created automatically and `device_name`
-  labels are remembered so imported readings keep their scale name.
-* Compatibility comes last: older headers (`ts_ms`, `timestamp`, `time`, `t`,
-  `weight_kg`, `weight`), integer millisecond timestamps, ISO-8601 and files
-  without a header still import.
-* Export is UTF-8 with a BOM so Excel opens it directly.
-* `file_picker` only accepts raw bytes on Android/iOS. On macOS/Windows/Linux the
-  plugin returns a path and `lib/service/file_saver.dart` writes the file; if the
-  chosen location is not writable (sandbox, read-only volume) the export falls back
-  to the temp folder and the snack bar shows that path.
-* Member **avatars**, **height**, **gender**, **birth month** and **goals** are
-  local preferences and are deliberately not part of CSV import/export. Avatars
-  are illustrated PNGs bundled under `assets/avatars/` (DiceBear *avataaars*,
-  see `assets/avatars/ATTRIBUTION.md`); legacy emoji avatars are mapped to a
-  stable id on load.
+* `ts` is Unix epoch seconds with exactly three decimals; `kg` is always kilograms.
+* `client_id` is this install's uploader id (created on first sync); blank when the export
+  came from an installation that never enabled upload.
+* Import maps columns by header name first (so a server export imports as-is), ignores extra
+  columns, and skips rows without a valid timestamp or weight. Unknown member names are
+  created automatically; device names are remembered.
+* Compatibility last: old headers (`ts_ms`, `timestamp`, `weight_kg`…), integer millisecond
+  timestamps, ISO-8601 and header-less files still import.
+* Export is UTF-8 **with BOM** so Excel opens it directly.
+* Avatars, height, gender, birth month and goals are local preferences and deliberately
+  excluded from CSV.
+* Units: kilograms are the storage unit; display supports kg / 斤 (jin) / lb / st:lb.
 
-## Body Composition
+## Measurement model
 
-The app shows weight and BMI only. Body fat / water / muscle / bone / BMR estimates
-were removed: this scale only broadcasts weight (plus an undocumented impedance
-byte), so those numbers would be invented rather than measured.
+The scale broadcasts weight and an undocumented impedance byte — nothing else. So the app
+shows weight, BMI and goal progress only; body fat, water, muscle and BMR were removed
+because those numbers would be invented rather than measured.
 
-## How to Run
+## Design
 
-1.  **Clone the repository:**
-    ```bash
-    git clone [https://github.com/rawanabuzir/litescale.git](https://github.com/rawanabuzir/litescale.git)
-    cd litescale
-    ```
+Material 3 with a hand-tuned lake-green (湖绿) palette — `lib/view/theme.dart`:
 
-2.  **Get dependencies:**
-    ```bash
-    flutter pub get
-    ```
+* `Brand` holds the four brand colours; `Insets` / `Radii` the layout rhythm.
+* `buildAppTheme()` derives every component theme from one text theme, so swapping
+  `fontFamily` propagates everywhere — that is how the screenshot harness injects fonts.
+* Shared pieces live in `lib/view/widgets/app_widgets.dart`: `AppCard`, `SectionHeader`,
+  `StatTile`, `StatusPill`, `ChoicePill`, `EmptyState`, `WeightRing`.
+* Controls are intrinsic-width (buttons, segmented controls, 104 px numeric fields) rather
+  than full-bleed, so short labels never stretch across the screen.
+* Avatars are illustrated PNGs under `assets/avatars/` (DiceBear *avataaars*, see
+  `assets/avatars/ATTRIBUTION.md`); legacy emoji avatars map to a stable id on load.
 
-3.  **Update MAC Address and Device Name (if applicable):**
-    Open `lib/main.dart` (or your app's main page file) and update the `targetMacAddress` and `targetDeviceName` based on your specific scale's information, which you can obtain using a tool like [nRF Connect](https://www.nordicsemi.com/Products/Software-and-Tools/nRF-Connect-for-Mobile).
+## App icon
 
-    ```dart
+<img src="docs/icon-preview-256.png" width="88" align="right">
 
-    final String targetDeviceName = "Your_Scale_Name";   // Replace with your scale's actual advertising name (e.g., Chipsea-BLE)
-    ```
+`scripts/icon_from_logo.py` turns `app-logo.png` into `app-icon-1024.png` plus the two
+Android adaptive layers (gradient backdrop, scale plate), then `flutter_launcher_icons`
+writes every platform size:
 
-4.  **Run the application:**
-    ```bash
-    flutter run
-    ```
-    (Ensure your mobile device is connected and USB debugging is enabled).
+```bash
+python3 scripts/icon_from_logo.py && flutter pub run flutter_launcher_icons
+```
 
-5.  **Activate Bluetooth and the Scale:**
-    Ensure Bluetooth is enabled on your mobile device. Once the app is running, activate your smart scale (typically by stepping on it for a few seconds) to make it start advertising and become discoverable and connectable.
-----
-## 📸 App Screenshots
+## Tests
 
-| Measure | History | Settings |
-|--------------|----------------------------|------------|
-| ![Measure](docs/screenshots/ui-measure.png) | ![History](docs/screenshots/ui-history.png) | ![Settings](docs/screenshots/ui-settings.png) |
+```bash
+flutter test             # widget, CSV, avatar and upload-gate tests
+./scripts/screenshots.sh # regenerate docs/screenshots/*.png
+```
 
-## Visual Design
+The screenshot harness (`tool/screenshots/screens_test.dart`) seeds a two-member household,
+fakes the BLE source, loads real fonts (Flutter's test runner ships none) and rasterises the
+shell at 2× — the images above come from the same widgets users see.
 
-Material 3 with a hand-tuned lake-green (湖绿) palette — see `lib/view/theme.dart`:
+## Troubleshooting
 
-* `Brand` holds the four brand colours, `Insets` / `Radii` the layout rhythm.
-* `buildAppTheme()` builds both light and dark schemes; every component theme
-  (cards, buttons, inputs, segmented controls, nav bar, dialogs) is derived from
-  the same text theme, so swapping `fontFamily` propagates everywhere.
-* Reusable pieces live in `lib/view/widgets/app_widgets.dart` — `AppCard`
-  (flat rounded surface), `SectionHeader`, `StatTile`, `StatusPill`, `ChoicePill`,
-  `EmptyState` and the `WeightRing` gauge.
-* Controls are intrinsic-width (`FilledButton`, `OutlinedButton`, segmented
-  buttons, 104 px numeric fields) rather than full-bleed, so short labels never
-  stretch across the screen.
+| Symptom | Cause / fix |
+|---|---|
+| `ANDROID_SPECIFIC_ERROR`, `Timed out` | The scale wants a specific connect sequence; retry and inspect the advertisement with nRF Connect. |
+| Nothing found on Android 12+ | `BLUETOOTH_SCAN` not granted, or location services off. |
+| macOS build: `module cache path …` | The project directory was renamed — `flutter clean`, delete `macos/Pods` and `Podfile.lock`. |
+| `pod install` fails with `curl 56 … unexpected eof` | A proxy is breaking git clones of git-sourced pods: `git config --global http.version HTTP/1.1`. |
+| `flutter test` dies with `Invalid WebSocket upgrade` | A local proxy is set; run with `env -u HTTP_PROXY -u HTTPS_PROXY …`. |
+| Gradle: `Could not read workspace metadata … metadata.bin` | Cache was deleted under a running daemon: `./gradlew --stop`, then remove `~/.gradle/caches`. |
 
------
+## Protocol references
 
-Permissions (Android) 
-The application requires the following permissions in your `android/app/src/main/AndroidManifest.xml` file:
-```xml
-<uses-permission android:name="android.permission.BLUETOOTH" />
-<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-<uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
-<uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
-<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-
-
-resources:
- Support request for Chipsea-based Body Fat analyzers:  https://github.com/oliexdev/openScale/issues/496
-https://github.com/oliexdev/openScale/files/5224454/OKOK.Protocol.pdf
-https://play.google.com/store/apps/details?id=uk.co.alt236.btlescan
-https://pub.dev/packages/flutter_blue_plus/install
-
-
+* OKOK protocol notes: <https://github.com/oliexdev/openScale/files/5224454/OKOK.Protocol.pdf>
+* Chipsea-based scale discussion: <https://github.com/oliexdev/openScale/issues/496>
+* BLE inspection tool: [nRF Connect](https://www.nordicsemi.com/Products/Software-Tools/nRF-Connect-for-mobile)
+* [`flutter_blue_plus`](https://pub.dev/packages/flutter_blue_plus)

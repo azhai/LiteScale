@@ -170,6 +170,7 @@ table.table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5p
   background:var(--s3);font-size:15px;overflow:hidden;
 }
 .avatar .swatch{width:100%;height:100%;border-radius:50%}
+.avatar img{display:block;width:100%;height:100%;object-fit:cover}
 .member-name{flex:1;min-width:0}
 .member-name b{font-size:12.5px}
 .member-name small{display:block;color:var(--faint);font-size:11px}
@@ -599,8 +600,9 @@ table.table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5p
       <template x-for="m in detail.members" :key="m.id">
         <div class="member-row">
           <div class="avatar">
-            <template x-if="m.avatar && m.avatar.length<=2"><span x-text="m.avatar"></span></template>
-            <template x-if="!m.avatar || m.avatar.length>2"><span class="swatch" :style="'background:'+colorOf(m.color)"></span></template>
+            <template x-if="isAvatarId(m.avatar)"><img :src="avatarUrl(m.avatar)" alt=""></template>
+            <template x-if="!isAvatarId(m.avatar) && m.avatar && m.avatar.length<=2"><span x-text="m.avatar"></span></template>
+            <template x-if="!isAvatarId(m.avatar) && (!m.avatar || m.avatar.length>2)"><span class="swatch" :style="'background:'+colorOf(m.color)"></span></template>
           </div>
           <div class="member-name">
             <b x-text="m.name"></b>
@@ -1242,6 +1244,8 @@ window.adminApp = function () {
       return this.fmtDate(ms);
     },
     shortId(s) { return s && s.length > 14 ? s.slice(0, 8) + '…' + s.slice(-4) : (s || '—'); },
+    isAvatarId(a) { return typeof a === 'string' && /^a\d\d$/.test(a); },
+    avatarUrl(a) { return '/admin/avatar/' + encodeURIComponent(a); },
     colorOf(color) {
       const n = (Number(color) || 0) >>> 0;
       const hex = ('000000' + n.toString(16)).slice(-6);

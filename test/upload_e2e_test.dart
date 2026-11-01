@@ -116,6 +116,7 @@ void main() {
     final Map<String, dynamic> member = members
         .cast<Map<String, dynamic>>()
         .firstWhere((Map<String, dynamic> m) => m['name'] == '阿债');
+    expect(member['avatar'], app.activeMember.avatar);
     expect((member['height_cm'] as num).toDouble(), closeTo(172, 0.001));
     expect(member['gender'], 'female');
     expect(member['birth'], '1990-05');
@@ -141,6 +142,79 @@ void main() {
     );
     expect(after['measurements'], 2);
     expect(after['batches'], before['batches']);
+
+    // Avatar / gender / birth edits trigger one metadata-only batch.
+    final String memberId = member['id'] as String;
+    await app.setMemberAvatar(memberId, avatar: 'a24');
+    await app.setMemberDetails(memberId, gender: 'male', birth: '1988-02');
+    await uploader.syncNow();
+    expect(uploader.error, isEmpty, reason: uploader.error);
+
+    final Map<String, dynamic> changed = await _adminJson(
+      'http://127.0.0.1:$port/api/v1/admin/clients/${uploader.clientId}',
+    );
+    final Map<String, dynamic> changedMember =
+        (changed['members'] as List<dynamic>)
+            .cast<Map<String, dynamic>>()
+            .firstWhere((Map<String, dynamic> m) => m['id'] == memberId);
+    expect(changedMember['avatar'], 'a24');
+    expect(changedMember['gender'], 'male');
+    expect(changedMember['birth'], '1988-02');
+    expect((changedMember['height_cm'] as num).toDouble(), closeTo(172, 0.001));
+    final Map<String, dynamic> finalOverview = await _adminJson(
+      'http://127.0.0.1:$port/api/v1/admin/overview',
+    );
+    expect(finalOverview['batches'], (after['batches'] as int) + 1);
+    expect(finalOverview['measurements'], 2);
+
+    // Manual "sync now" is forced: it resends metadata even when nothing
+    // changed, so an upgraded server picks up fields it never stored.
+    await uploader.syncNow();
+    final Map<String, dynamic> quiet = await _adminJson(
+      'http://127.0.0.1:$port/api/v1/admin/overview',
+    );
+    expect(quiet['batches'], finalOverview['batches']);
+
+    // Simulate a server that recorded the batch but dropped the profile.
+    await _adminPost(
+      'http://127.0.0.1:$port/api/v1/admin/clients/${uploader.clientId}/members/$memberId',
+      <String, dynamic>{
+        'name': '阿债',
+        'avatar': 'a24',
+        'color': 0,
+        'height_cm': 0,
+        'gender': '',
+        'birth': '',
+      },
+    );
+    final Map<String, dynamic> cleared = await _adminJson(
+      'http://127.0.0.1:$port/api/v1/admin/clients/${uploader.clientId}',
+    );
+    final Map<String, dynamic> clearedMember =
+        (cleared['members'] as List<dynamic>)
+            .cast<Map<String, dynamic>>()
+            .firstWhere((Map<String, dynamic> m) => m['id'] == memberId);
+    expect(clearedMember['gender'], '');
+    expect(clearedMember['birth'], '');
+
+    await uploader.syncNow(force: true);
+    expect(uploader.error, isEmpty, reason: uploader.error);
+    final Map<String, dynamic> forced = await _adminJson(
+      'http://127.0.0.1:$port/api/v1/admin/overview',
+    );
+    expect(forced['batches'], (quiet['batches'] as int) + 1);
+    expect(forced['measurements'], 2);
+    final Map<String, dynamic> restored = await _adminJson(
+      'http://127.0.0.1:$port/api/v1/admin/clients/${uploader.clientId}',
+    );
+    final Map<String, dynamic> restoredMember =
+        (restored['members'] as List<dynamic>)
+            .cast<Map<String, dynamic>>()
+            .firstWhere((Map<String, dynamic> m) => m['id'] == memberId);
+    expect(restoredMember['avatar'], 'a24');
+    expect(restoredMember['gender'], 'male');
+    expect(restoredMember['birth'], '1988-02');
+    expect((restoredMember['height_cm'] as num).toDouble(), closeTo(172, 0.001));
   });
 }
 
@@ -153,4 +227,16 @@ Future<Map<String, dynamic>> _adminJson(String url) async {
   client.close();
   expect(res.statusCode, 200, reason: body);
   return jsonDecode(body) as Map<String, dynamic>;
+}
+
+Future<void> _adminPost(String url, Map<String, dynamic> payload) async {
+  final HttpClient client = HttpClient();
+  final HttpClientRequest req = await client.postUrl(Uri.parse(url));
+  req.headers.set('Authorization', 'Bearer test-admin-token');
+  req.headers.contentType = ContentType.json;
+  req.write(jsonEncode(payload));
+  final HttpClientResponse res = await req.close();
+  final String body = await res.transform(utf8.decoder).join();
+  client.close();
+  expect(res.statusCode, 200, reason: body);
 }

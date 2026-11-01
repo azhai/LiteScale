@@ -25,6 +25,22 @@ handle_admin_js :: proc(req: ^web.Request, res: ^web.Response) {
 	web.response_write_string(res, ADMIN_JS)
 }
 
+handle_admin_avatar :: proc(req: ^web.Request, res: ^web.Response) {
+	id, has := web.request_param(req, "id")
+	if !has {
+		fail(res, .Bad_Request, "missing avatar id")
+		return
+	}
+	png := avatar_png(id)
+	if png == "" {
+		fail(res, .Not_Found, "unknown avatar")
+		return
+	}
+	web.response_set_header(res, "Content-Type", "image/png")
+	web.response_set_header(res, "Cache-Control", "public, max-age=86400")
+	web.response_write_string(res, png)
+}
+
 handle_root :: proc(req: ^web.Request, res: ^web.Response) {
 	web.response_redirect(res, "/admin/")
 }
@@ -1790,6 +1806,7 @@ register_admin_routes :: proc() {
 	web.router_get(&G.router, "/admin", handle_admin_index)
 	web.router_get(&G.router, "/admin/", handle_admin_index)
 	web.router_get(&G.router, "/admin/alpine.js", handle_admin_js)
+	web.router_get(&G.router, "/admin/avatar/:id", handle_admin_avatar)
 
 	web.router_get(&G.router, "/api/v1/admin/overview", handle_admin_overview)
 	web.router_get(&G.router, "/api/v1/admin/clients", handle_admin_clients)

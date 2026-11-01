@@ -804,7 +804,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       const SizedBox(width: 4),
                       FilledButton.tonalIcon(
-                        onPressed: u.busy ? null : () => u.syncNow(),
+                        onPressed: u.busy ? null : () => u.syncNow(force: true),
                         icon: const Icon(Icons.sync_rounded, size: 18),
                         label: Text(s.syncNow),
                         style: FilledButton.styleFrom(

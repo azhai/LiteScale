@@ -12,7 +12,7 @@ import '../model/weight_record.dart';
 import 'app_controller.dart';
 
 /// Keep in sync with the `version:` field in pubspec.yaml.
-const String kClientAppVersion = '1.0.8';
+const String kClientAppVersion = '1.1.1';
 const int kSchemaVersion = 1;
 const int kMaxRecordsPerBatch = 300;
 
@@ -149,7 +149,9 @@ class Uploader extends ChangeNotifier {
 
   // --- sync --------------------------------------------------------------
 
-  Future<void> syncNow() async {
+  /// [force] resends member metadata even when the local signature matches,
+  /// so a fresh or upgraded server picks up profile fields it never stored.
+  Future<void> syncNow({bool force = false}) async {
     if (!_enabled || _busy) return;
     if (_baseUrl.isEmpty) {
       await _setError(_t('请先填写服务器地址', 'Set a server URL first'));
@@ -173,9 +175,12 @@ class Uploader extends ChangeNotifier {
       }
 
       final String sig = _metaSignature();
-      if (sent == 0 && sig != _metaSig) {
+      if (sent == 0 && (force || sig != _metaSig)) {
         // Metadata-only batch (member rename, new goal, ...).
-        final _BatchResult r = await _postBatch(<WeightRecord>[]);
+        final _BatchResult r = await _postBatch(
+          <WeightRecord>[],
+          nonce: force ? DateTime.now().millisecondsSinceEpoch : 0,
+        );
         sent += r.accepted;
         rejected += r.rejected;
       }
@@ -255,8 +260,8 @@ class Uploader extends ChangeNotifier {
     await _prefs?.setString(_kTokenUrl, _tokenUrl);
   }
 
-  Future<_BatchResult> _postBatch(List<WeightRecord> records) async {
-    final List<int> bytes = utf8.encode(_batchBody(records));
+  Future<_BatchResult> _postBatch(List<WeightRecord> records, {int nonce = 0}) async {
+    final List<int> bytes = utf8.encode(_batchBody(records, nonce: nonce));
     final String sha = sha256.convert(bytes).toString();
     final Map<String, String> headers = <String, String>{
       'Content-Type': 'application/json',
@@ -294,7 +299,7 @@ class Uploader extends ChangeNotifier {
           )
           .timeout(const Duration(seconds: 30));
 
-  String _batchBody(List<WeightRecord> records) {
+  String _batchBody(List<WeightRecord> records, {int nonce = 0}) {
     final Map<String, dynamic> body = <String, dynamic>{
       'schema_version': kSchemaVersion,
       'client': <String, dynamic>{
@@ -356,6 +361,9 @@ class Uploader extends ChangeNotifier {
             'd': r.deviceId ?? '',
           },
       ],
+      // Batch ids are body hashes; a fresh nonce makes a forced metadata
+      // resend distinct so a server that already saw the old body re-applies it.
+      if (nonce != 0) 'sync_nonce': nonce,
     };
     return jsonEncode(body);
   }
